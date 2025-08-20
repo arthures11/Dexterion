@@ -200,6 +200,7 @@ inline nlohmann::json miscConfig::to_json()
 	json["bhopJumpVelocityThreshold"] = bhopJumpVelocityThreshold; // Added serialization
 	json["bhopSleep"] = bhopSleep;								   // Added serialization
 	json["bhopSleepForZero"] = bhopSleepForZero;				   // Added serialization
+	json["latencyLasers"] = latencyLasers;				   // Added serialization
 	json["trigg"] = trigg;
 	json["deathmatchMode"] = deathmatchMode;
 	json["consoleVisible"] = consoleVisible;
@@ -262,6 +263,13 @@ inline bool miscConfig::from_json(nlohmann::json json)
 		else
 		{
 			bhopSleepForZero = 15625; // Default value if not found
+		}
+		if (json.contains("latencyLasers"))
+		{ // Added deserialization
+			latencyLasers = json["latencyLasers"];
+		}
+		else{
+			latencyLasers = 0.0f;
 		}
 		if (json.contains("trigg"))
 		{ // Added deserialization

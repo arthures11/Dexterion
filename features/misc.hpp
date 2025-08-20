@@ -11,6 +11,9 @@
 #include <atomic>
 #include <mutex>
 #include <vector> // Include vector header
+#include <optional>
+#include <tesseract/baseapi.h>
+#include <leptonica/allheaders.h>
 
 namespace misc
 {
@@ -22,6 +25,27 @@ namespace misc
         Vector3 worldOrigin; // New: Store world origin for distance calculation
         std::string name;
     };
+
+
+struct DisplayedMessage {
+    std::string messageText;
+    std::string normalizedText; // We need this back for identifying unique timers!
+    std::chrono::seconds duration;
+    std::chrono::steady_clock::time_point creationTime;
+};
+
+    extern std::vector<DisplayedMessage> g_displayedMessages;
+    extern std::mutex g_displayedMessagesMutex;
+
+    // MODIFIED: The handler now needs the client module info to perform pattern scans.
+    void handleChatTrigger(bool enabled, MemoryManagement::moduleData client);
+    void drawTriggerMessage();
+
+    // --- End of feature-specific declarations ---
+
+
+    // This function is the public interface to draw the messages
+
 
     // Storage for item ESP data and mutex for thread safety
 	extern std::vector<ItemESPData> itemESPList;
@@ -38,7 +62,14 @@ namespace misc
     void disableDroppedItemSeparateThread();
     bool isGameWindowActive();
     void bunnyHop(DWORD_PTR base, LocalPlayer localPlayer);
-    // Damage tracking structure (similar to CSGO implementation)
+    Vector3 calculateAngle(const Vector3& localPosition, const Vector3& enemyPosition, const Vector3& viewAngles);
+    float DistanceToRaySquared(const Vector3& p, const Vector3& ray_origin, const Vector3& ray_direction_normalized);
+    extern std::atomic<bool> g_is_universal_threat_enabled2; // Use atomic for thread safety
+    extern	std::atomic<bool> g_stopChatMonitorThread;
+	extern std::atomic<bool> isChatMonitorEnabled;
+    extern std::atomic<bool> isCrouchOnly;
+    void AngleVectors(const Vector3& angles, Vector3* forward, Vector3* right, Vector3* up);
+    Vector3 AngleToForwardVector(const Vector3& angles);
     // In misc.hpp
     struct DamageData
     {
@@ -72,6 +103,8 @@ namespace misc
     void stopBhopThread();                                         // Function to signal the thread to stop and join it
     
     void startItemESPThread(MemoryManagement::moduleData client); // Function to initialize and start the thread
+    void handleAutoLaser(bool enabled, MemoryManagement::moduleData client, LocalPlayer localPlayer);
+    Vector3 RotatePoint(Vector3 point, Vector3 angles);
     void stopItemESPThread();
 
     // Utility to get current timestamp in seconds
@@ -79,6 +112,17 @@ namespace misc
     {
         return static_cast<int>(std::time(nullptr));
     }
+
+    void DrawAllDebugBoxes();
+
+    struct DebugBox {
+        ImVec2 screenCorners[8];
+        bool shouldDraw = false;
+    };
+
+    // A global vector to hold all boxes we want to draw this frame
+    inline std::vector<DebugBox> g_debugBoxesToDraw;
+    inline std::mutex g_debugBoxMutex;
 
     struct CDamageRecord
     {

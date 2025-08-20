@@ -374,6 +374,9 @@ void imGuiMenu::miscRender() {
 			ImGui::InputInt("Zerosleep", &miscConf.bhopSleepForZero);
 			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 			ImGui::InputInt("ErrorTrigg", &miscConf.trigg);
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+			ImGui::SliderFloat("latencyLasers", &miscConf.latencyLasers, 0.0f, 0.10f, "%.2f");
+
 
 		}
 		ImGui::EndChild();
@@ -489,7 +492,7 @@ void imGuiMenu::accountRender() {
 
 		if (ImGui::Button("Copy My Token", ImVec2(150, 40))) {
 			ImGui::LogToClipboard();
-			ImGui::LogText(DiscordVerify::getToken(Shared::steamId).c_str());
+			//ImGui::LogText(DiscordVerify::getToken(Shared::steamId).c_str());
 			ImGui::LogFinish();
 			ImGui::OpenPopup("CopyToken");
 		}

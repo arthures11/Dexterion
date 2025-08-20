@@ -12,20 +12,32 @@
 #include <algorithm>
 #include "../imgui/imgui.h"
 #include "Vectors.h"
+#include <stringapiset.h>
 
 #include <comdef.h>
 #include <Wbemidl.h>
+#include <cctype>
+
 #undef min
 
 inline namespace Logger {
 	inline HANDLE hConsole;
 
-	inline std::wstring StrToWstr(std::string str)
-	{
-		std::wstring temp;
-		std::copy(str.begin(), str.end(), std::back_inserter(temp));
-		return temp;
-	}
+inline std::wstring StrToWstr(const std::string& str)
+{
+    if (str.empty()) {
+        return L"";
+    }
+    // CP_UTF8 is the crucial flag that tells the function our source is UTF-8
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+    if (size_needed <= 0) {
+        // You could add error logging here if you want
+        return L"";
+    }
+    std::wstring wstrTo(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
+    return wstrTo;
+}
 
 	// WString
 	inline void info(std::wstring str, bool endLine = true) {
@@ -91,6 +103,37 @@ inline namespace utils {
 	inline float getDistance(Vector3 from, Vector3 to) {
 		return sqrt(pow(to.x - from.x, 2) + pow(to.y - from.y, 2) + pow(to.z - from.z, 2));
 	};
+
+ inline std::string sanitizeString(const std::string& input) {
+        std::string cleaned;
+        cleaned.reserve(input.length()); // Pre-allocate memory for efficiency
+        for (char c : input) {
+            // isprint() checks for any printable character (letters, digits, punctuation, space)
+            // The cast to unsigned char is crucial for isprint to work correctly with all byte values.
+            if (isprint(static_cast<unsigned char>(c))) {
+                cleaned += c;
+            }
+        }
+        return cleaned;
+    }
+
+	  inline int levenshteinDistance(const std::string &s1, const std::string &s2) {
+        const size_t len1 = s1.size(), len2 = s2.size();
+        std::vector<unsigned int> col(len2 + 1), prevCol(len2 + 1);
+
+        for (unsigned int i = 0; i < prevCol.size(); i++) {
+            prevCol[i] = i;
+        }
+
+        for (unsigned int i = 0; i < len1; i++) {
+            col[0] = i + 1;
+            for (unsigned int j = 0; j < len2; j++) {
+                col[j + 1] = std::min({ prevCol[j + 1] + 1, col[j] + 1, prevCol[j] + (s1[i] == s2[j] ? 0 : 1) });
+            }
+            col.swap(prevCol);
+        }
+        return prevCol[len2];
+    }
 
 	inline std::string get_hwid() {
 		HW_PROFILE_INFO hwProfileInfo;

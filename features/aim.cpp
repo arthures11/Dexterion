@@ -23,6 +23,7 @@ void aim::aimBot(LocalPlayer localPlayer, Vector3 baseViewAngles, uintptr_t enem
 	if (aimConf.playerLock){
 		if (lockedPlayer != 0 && lockedPlayer != enemyPlayer) return;
 	}
+
 	if (enemyPlayer == localPlayer.getPlayerPawn()) {
 		lockedPlayer = 0;
 		return;
@@ -32,9 +33,12 @@ void aim::aimBot(LocalPlayer localPlayer, Vector3 baseViewAngles, uintptr_t enem
 	
 	// Get player velocity for movement compensation
 	Vector3 playerVelocity = MemMan.ReadMem<Vector3>(localPlayer.getPlayerPawn() + clientDLL::C_BaseEntity_["m_vecVelocity"]);
+
 	
 	// Get enemy velocity for prediction
 	Vector3 enemyVelocity = MemMan.ReadMem<Vector3>(enemyPlayer + clientDLL::C_BaseEntity_["m_vecVelocity"]);
+	
+	//Logger::info(std::to_string(enemyVelocity.z));
 
 	// Calculate prediction time factor - time to hit the target
 	float predictionTime = 0.030f; // 50ms prediction (adjust based on testing)
@@ -89,7 +93,7 @@ void aim::aimBot(LocalPlayer localPlayer, Vector3 baseViewAngles, uintptr_t enem
 		}
 	}
 	else {
-		aim::moveMouseToLocation(newAngle);
+		//aim::moveMouseToLocation(newAngle);
 	}
     lastMoveTime = now;
 	lockedPlayer = enemyPlayer;

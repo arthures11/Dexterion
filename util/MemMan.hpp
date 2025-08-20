@@ -81,6 +81,29 @@ public:
         return process;
     }
 
+    uintptr_t getPidById(const wchar_t* name, DWORD targetPid) {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return 0;
+
+    PROCESSENTRY32W entry;
+    entry.dwSize = sizeof(entry);
+
+    uintptr_t process = 0;
+
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (!_wcsicmp(entry.szExeFile, name) && entry.th32ProcessID == targetPid) {
+                process = entry.th32ProcessID;
+                proc = OpenProcess(PROCESS_ALL_ACCESS, false, process);
+                break;
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+
+    CloseHandle(snapshot);
+    return process;
+}
+
 
     HMODULE getModule(uintptr_t pid, const wchar_t* name) {
         HANDLE module = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);

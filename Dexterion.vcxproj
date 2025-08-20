@@ -138,11 +138,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="features\aim.hpp" />
+    <ClInclude Include="features\base64.h" />
     <ClInclude Include="features\bomb.hpp" />
     <ClInclude Include="features\entry.hpp" />
     <ClInclude Include="features\esp.hpp" />
     <ClInclude Include="features\include.hpp" />
     <ClInclude Include="features\misc.hpp" />
+    <ClInclude Include="features\stb_image_write.h" />
     <ClInclude Include="features\timeddraw.hpp" />
     <ClInclude Include="gui\menu.hpp" />
     <ClInclude Include="gui\overlay.hpp" />
@@ -541,6 +543,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="features\aim.cpp" />
+    <ClCompile Include="features\base64.cpp" />
     <ClCompile Include="features\bomb.cpp" />
     <ClCompile Include="features\entry.cpp" />
     <ClCompile Include="features\esp.cpp" />

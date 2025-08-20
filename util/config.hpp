@@ -7,6 +7,9 @@
 
 #include "../json/jsonOps.hpp"
 
+
+
+
 struct espConfig {
 	// *--*--*--*--*--*Player ESP*--*--*--*--*--* \\ 
 	bool state;
@@ -62,6 +65,11 @@ struct espConfig {
 };
 espConfig espConf = {};
 
+enum class AutoLaserMode {
+	Off,
+	Normal,
+	FastJump
+};
 
 struct aimConfig {
 	bool state;
@@ -104,6 +112,7 @@ struct aimConfig {
 aimConfig aimConf = {};
 
 
+
 struct miscConfig {
 	bool itemESP;
 	bool deathmatchMode;
@@ -114,6 +123,7 @@ struct miscConfig {
 	float bhopJumpVelocityThreshold = -290.0f; // Added for configurable bhop jump velocity
 	int bhopSleep = 15625;
 	int bhopSleepForZero = 15625;
+	float latencyLasers = 0.0f;
 	int trigg = 0;
 	bool consoleVisible = true;
 	bool obsBypass = true;
@@ -122,11 +132,15 @@ struct miscConfig {
 	float damageListColours[4] = { 0.f, 1.f, 0.f, 1.f };
 	std::vector<std::string> itemESPFilter = { "te", "p2", "glo" }; // New: Configurable item ESP filter strings
 	float itemESPFontSize = 22.0f; // New: Configurable base font size for item ESP
-
+    bool autoLaserDodge = false; 
+    AutoLaserMode laserMode = AutoLaserMode::Off; 
 	inline nlohmann::json to_json();
 	inline bool from_json(nlohmann::json json);
 };
 miscConfig miscConf = {};
+
+
+
 
 //settings for configs
 const int MAX_CONFIGS = 32;
@@ -142,6 +156,10 @@ inline namespace config {
 	void create(std::wstring name);
 	bool exists(int index);
 }
+
+
+
+
 
 enum bones : int {
 	head            = 6,

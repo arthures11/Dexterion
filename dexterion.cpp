@@ -10,7 +10,8 @@
 #include "util/MemMan.hpp"
 #include "util/attributes.hpp"
 #include "features/misc.hpp" 
-
+#include <io.h>
+#include <fcntl.h>
 
 LRESULT Wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
@@ -34,19 +35,27 @@ LRESULT Wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
 	AllocConsole();
+	_setmode(_fileno(stdout), _O_U16TEXT); 
+
 	freopen("CONOUT$", "w", stdout);
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
 	Logger::hConsole = hConsole;
 
 	// Memory and game related vars (used in entry and passed through overlay)
-	int procId = MemMan.getPid(L"cs2.exe");
+	 int procId = MemMan.getPid(L"cs2.exe");
+	//int procId = 8480;
+	//==int procId = MemMan.getPid(L"cs2.exe", 12992);
+
+	//Logger::info(std::to_string(procId));
 	// Weird method until I find a proper fix, im tired rn
 	if (procId == 0) {
 		//Logger::info("[MemMan] Waiting For Counter Strike 2");
 		while ((procId = MemMan.getPid(L"cs2.exe")) == 0)
 			std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 	}
+	//Logger::info("STdf:");
+	//Logger::info(std::to_string(procId));
 	//Logger::success("LOL: "+procId);
 	//Logger::info("[Config.hpp] Checking for config file...");
 	config::refresh();
@@ -64,11 +73,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	MemoryManagement::moduleData client;
 	client.module = MemMan.getModule(procId, L"client.dll");
 	client.base = MemMan.getModuleBase(procId, "client.dll");
-	while (client.base == 0 || client.module == 0) {
+	while (client.base == 0 || client.module == 0 || client.size ==0) {
 		client.module = MemMan.getModule(procId, L"client.dll");
 		client.base = MemMan.getModuleBase(procId, "client.dll");
+		client.size = MemMan.getModuleSize(procId, _T("client.dll")); 
+
 		std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 	}
+	    Logger::info(std::format("Client Base: {:#x}, Size: {}", client.base, client.size)); // Add this log to confirm
+
 	if (!loadJson()) {
 		//Logger::error("[attributes.cpp] Cannot load JSON files (did you run updateoffsets.cmd?)");
 		system("pause");
@@ -90,6 +103,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	//Logger::info("[overlay.cpp] Starting main loop...");
 	//misc::startBhopThread(); 
 	overlayClass.renderLoop(client);
+	 
 	
 
 	return 0;

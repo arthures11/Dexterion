@@ -29,6 +29,18 @@ void logPlayerNameToFile(const std::string &playerName)
 	}
 }
 
+const char* getBoneName(int boneIndex) {
+    switch (boneIndex) {
+        case 0: return "head";
+        case 2: return "chest";
+        case 3: return "crotch";
+        default: return "unknown"; // Fallback for any other value
+    }
+}
+
+uintptr_t bestTargetPawn = 0;
+float smallestDist = FLT_MAX; // Use a very large number, like float max
+
 void mainLoop(bool state, MemoryManagement::moduleData client)
 {
 	// Classes
@@ -49,6 +61,7 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 	localPlayer.getPlayerPawn();
 
 	CBasePlayerController.controller = localPlayer.getPlayerController();
+	
 	if (Shared::steamId != CBasePlayerController.getSteamId())
 		Shared::steamId = CBasePlayerController.steamId;
 	// Aimbot FOV circle
@@ -64,13 +77,90 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 		float screenMidX = GetSystemMetrics(SM_CXSCREEN) / 2.f;
 		float screenMidY = GetSystemMetrics(SM_CYSCREEN) / 2.f;
 
-		ImGui::GetBackgroundDrawList()->AddCircle({screenMidX, screenMidY}, (aimConf.fov * 10), ImColor(1.f, 1.f, 1.f, 1.f), 0, 1.f);
+		  float verticalOffset = 60.0f; 
+    	float fovCenterY = screenMidY - verticalOffset;
+
+		ImGui::GetBackgroundDrawList()->AddCircle({screenMidX, fovCenterY}, (aimConf.fov * 10), ImColor(1.f, 1.f, 1.f, 1.f), 0, 1.f);
 	}
+
+	 static bool zKeyWasPressed = false;
+    if (GetAsyncKeyState('Z') & 0x8000) { // Check if 'Z' key is currently down
+        if (!zKeyWasPressed) {
+            // This is the first frame the key is pressed, so we execute the change
+            zKeyWasPressed = true;
+            
+            // Cycle through the bone selection: 0 -> 2 -> 3 -> 0
+            if (aimConf.boneSelect == 0) {
+                aimConf.boneSelect = 2;
+            } else if (aimConf.boneSelect == 2) {
+                aimConf.boneSelect = 3;
+            } else { // If it's 3 or any other value, reset to 0
+                aimConf.boneSelect = 0;
+            }
+        }
+    } else {
+        // The key is not down, so reset our flag for the next press
+        zKeyWasPressed = false;
+    }
+
+
+static bool upArrowWasPressed = false;
+if (GetAsyncKeyState(VK_UP) & 0x8000) {
+    if (!upArrowWasPressed) {
+        upArrowWasPressed = true;
+        
+        // --- CORRECTED TOGGLE LOGIC ---
+        // 1. Flip the state of our single boolean flag.
+        misc::g_is_universal_threat_enabled2 = !misc::g_is_universal_threat_enabled2;
+        
+        // 2. Call the handler with the NEW state.
+        misc::handleAutoLaser(misc::g_is_universal_threat_enabled2, client, localPlayer);
+    }
+} else {
+    upArrowWasPressed = false;
+}
+
+static bool rightArrowWasPressed = false;
+
+if (GetAsyncKeyState(VK_RIGHT) & 0x8000) {
+    if (!rightArrowWasPressed) {
+        rightArrowWasPressed = true;
+        
+        // --- CORRECTED TOGGLE LOGIC ---
+        // 1. Flip the state of our single boolean flag.
+        misc::isChatMonitorEnabled = !misc::isChatMonitorEnabled;
+        
+        // 2. Call the handler with the NEW state.
+		misc::handleChatTrigger(misc::isChatMonitorEnabled, client);    }
+} else {
+    rightArrowWasPressed = false;
+}
+
+static bool downArrowWasPressed = false;
+
+if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
+    if (!downArrowWasPressed) {
+        downArrowWasPressed = true;
+        
+		if(misc::g_is_universal_threat_enabled2){
+        misc::isCrouchOnly = !misc::isCrouchOnly;
+		}
+
+        
+
+		   }
+} else {
+    downArrowWasPressed = false;
+}
+
+
+
+    //misc::DrawAllDebugBoxes(); 
+
 	// Recoil control
 
 	// Bomb Timer
 	// if (miscConf.bombTimer) bomb::timer(C_C4);
-
 	// Bunny Hop
 	if (miscConf.bhopEnabled)
 		misc::bunnyHop(client.base, localPlayer);
@@ -81,13 +171,26 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
 		ImGui::Begin("Speed Display", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 		ImGui::Text("Speed: %.2f", currentSpeed);
-		ImGui::Text("Head: %d", aimConf.boneSelect);
+		 if (misc::g_is_universal_threat_enabled2 && misc::isCrouchOnly) {
+        ImGui::Text("AutoLaser: ENABLED + crouch only");
+    } 
+	else if(misc::g_is_universal_threat_enabled2 && !misc::isCrouchOnly){
+		ImGui::Text("AutoLaser: ENABLED");
+	}
+	else if (misc::g_is_universal_threat_enabled2 == false) {
+        ImGui::Text("AutoLaser: ");
+    }
+		ImGui::Text("Bone: %s", getBoneName(aimConf.boneSelect));
 		ImGui::End();
 	}
 
 	// Tigger
-	if (aimConf.trigger)
+	if (aimConf.trigger){
 		aim::triggerBot(localPlayer, client.base);
+	}
+
+		//Logger::info("About to call "); // Add this line
+		misc::drawTriggerMessage();
 
 	// std::unordered_map<std::string, std::pair<int, uintptr_t>> playerDamageMap;
 	std::unordered_map<std::string, std::tuple<int, int, uintptr_t>> playerDamageMap;
@@ -96,8 +199,8 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 	int currentTime = misc::getCurrentTimestamp();
 	std::vector<std::string> spectators{};
 
-	// logPlayerNameToFile("-----------------------------------------------------------------------");
-	for (int i = 0; i <= 64; i++)
+	 logPlayerNameToFile("-----------------------------------------------------------------------");
+	for (int i = 1; i <= 64; i++)
 	{
 		// Player controller
 		CCSPlayerController.id = i;
@@ -222,7 +325,7 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 		// Game scene node
 		CGameSceneNode.value = C_CSPlayerPawn.getCGameSceneNode();
 
-		// logPlayerNameToFile(CCSPlayerController.pawnName);
+		 logPlayerNameToFile(CCSPlayerController.pawnName);
 
 		// ESP
 		if (espConf.state)
@@ -230,8 +333,8 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 			// Logger::info(std::format("ESPs ({})", i));
 			if (C_CSPlayerPawn.getPlayerPawn() == localPlayer.getPlayerPawn())
 				continue;
-			esp::sharedData::weaponID = C_CSPlayerPawn.getWeaponID();
-			esp::sharedData::weaponName = C_CSPlayerPawn.getWeaponName();
+			//esp::sharedData::weaponID = C_CSPlayerPawn.getWeaponID();
+			//esp::sharedData::weaponName = C_CSPlayerPawn.getWeaponName();
 			esp::sharedData::localOrigin = localPlayer.getOrigin();
 			esp::sharedData::entityOrigin = C_CSPlayerPawn.getOrigin();
 			esp::sharedData::distance = (int)(utils::getDistance(esp::sharedData::localOrigin, esp::sharedData::entityOrigin)) / 100;
@@ -270,20 +373,25 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 			{
 				if (aimConf.state)
 				{
-					if (aimConf.rcs)
+					if (aimConf.rcs){
 						aim::recoilControl(localPlayer, true);
+					}
 					// if (!spectators.empty()) {
 					// 	continue;
 					// }
-					if (C_CSPlayerPawn.getPlayerPawn() == localPlayer.getPlayerPawn())
-						continue;
+					// if (C_CSPlayerPawn.getPlayerPawn() == localPlayer.getPlayerPawn()){
+					// 	continue;
+					// }
+
 
 					// Player lock
 					if (aimConf.playerLock)
 					{
 						// Check if current enemy is the preferred target
 						uintptr_t preferredPlayerPawn = doPreferred(C_CSPlayerPawn, CGameSceneNode, localPlayer, aim::lockedPlayer, viewMatrix, aimConf.aimModeMap[aimConf.aimModes[aimConf.aimMode]], client).playerPawn;
-
+						if(preferredPlayerPawn==0){
+							continue;
+						}
 						// If this enemy isn't the preferred target, skip to the next enemy in loop
 						if (preferredPlayerPawn != C_CSPlayerPawn.playerPawn)
 						{
@@ -316,6 +424,7 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 					}
 					else
 					{
+						//Logger::warn(CCSPlayerController.pawnName);
 						aim::aimBot(localPlayer, baseViewAngles, C_CSPlayerPawn.playerPawn, CGameSceneNode.boneArray, client);
 					}
 				}
@@ -441,12 +550,24 @@ void mainLoop(bool state, MemoryManagement::moduleData client)
 C_CSPlayerPawn doPreferred(C_CSPlayerPawn C_CSPlayerPawn_, CGameSceneNode CGameSceneNode, LocalPlayer localPlayer, uintptr_t preferredTarget, view_matrix_t viewMatrix, int mode, MemoryManagement::moduleData client)
 {
 	C_CSPlayerPawn target(client.base);
-	if (preferredTarget == 0)
+	if (preferredTarget == 0){
 		return C_CSPlayerPawn_;
+	}
+
 	target.playerPawn = preferredTarget;
 
-	if (target.getPawnHealth() <= 0 || target.getPawnHealth() > 100000)
+	if (target.getPawnHealth() <= 0 || target.getPawnHealth() > 100000){
 		return C_CSPlayerPawn_;
+	}
+
+	Vector3 newVelocity = MemMan.ReadMem<Vector3>(C_CSPlayerPawn_.playerPawn + clientDLL::C_BaseEntity_["m_vecVelocity"]);
+
+    // NEW: Check if the target is falling too fast.
+    // if (newVelocity.z > 340.0f)
+    // {
+    //     return 0;
+    // }
+
 
 	switch (mode)
 	{
@@ -523,7 +644,7 @@ C_CSPlayerPawn doPreferred(C_CSPlayerPawn C_CSPlayerPawn_, CGameSceneNode CGameS
 
 		// Get screen center coordinates
 		float screenCenterX = (float)GetSystemMetrics(SM_CXSCREEN) / 2;
-		float screenCenterY = (float)GetSystemMetrics(SM_CYSCREEN) / 2;
+		float screenCenterY = ((float)GetSystemMetrics(SM_CYSCREEN) / 2) - 50.0f;
 
 		float newDistToCenter = utils::getDistance(
 			{newHeadPosToScreen.x, newHeadPosToScreen.y},
@@ -552,9 +673,21 @@ C_CSPlayerPawn doPreferred(C_CSPlayerPawn C_CSPlayerPawn_, CGameSceneNode CGameS
 
 		bool oldInFOV = oldValidScreen && (oldDistToCenter <= (aimConf.fov * 10));
 
+
+	// 	  bool isNewTargetInFront = newHeadPosToScreen.z >= 0.01f;
+    // bool isOldTargetInFront = oldHeadPosToScreen.z >= 0.01f;
+
+    // // --- Now, make a decision based on who is in front ---
+    // if (isNewTargetInFront && !isOldTargetInFront) {
+    //     return C_CSPlayerPawn_; // New target is in front, old is behind. Obvious choice.
+    // }
+    // if (!isNewTargetInFront && isOldTargetInFront) {
+    //     return target; // Old target is in front, new is behind. Stick with old.
+    // }
+    // if (!isNewTargetInFront && !isOldTargetInFront) {
+    //     return target; // Both are behind, stick with the old target to prevent weird switching.
+    // }
 		// Calculate distances for use after FOV check
-		float distToNew = utils::getDistance(localPlayer.getOrigin(), C_CSPlayerPawn_.getOrigin());
-		float distToOld = utils::getDistance(localPlayer.getOrigin(), target.getOrigin());
 
 		// TARGETING LOGIC:
 		// 1. FOV has absolute priority - if one player is in FOV and the other isn't, pick the one in FOV
@@ -562,20 +695,26 @@ C_CSPlayerPawn doPreferred(C_CSPlayerPawn C_CSPlayerPawn_, CGameSceneNode CGameS
 		{
 			return C_CSPlayerPawn_;
 		}
-		if (oldInFOV && !newInFOV)
+		else if (oldInFOV && !newInFOV)
 		{
 			return target;
 		}
-
-		// 2. If both are in FOV or both are outside FOV, pick the closest one
-		if (distToNew < distToOld)
-		{
-			return C_CSPlayerPawn_;
-		}
-		else
-		{
-			return target;
-		}
+		 else if (newInFOV && oldInFOV)
+    {
+        float distToNew = utils::getDistance(localPlayer.getOrigin(), C_CSPlayerPawn_.getOrigin());
+	    float distToOld = utils::getDistance(localPlayer.getOrigin(), target.getOrigin());
+        if (distToNew < distToOld) {
+            return C_CSPlayerPawn_;
+        } else {
+            return target;
+        }
+    }
+    // 4. (The FIX) If BOTH are OUTSIDE the FOV, do NOT switch. Stick with the old target.
+    //    This prevents the aimbot from picking a new, random, out-of-FOV target.
+    else // This handles the (!newInFOV && !oldInFOV) case
+    {
+        return 0; 
+    }
 	}
 	default:
 		return C_CSPlayerPawn_;

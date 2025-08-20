@@ -29,6 +29,13 @@ bool clientDLL::load() {
 	CCSWeaponBaseVData_ = clientDLLOffsets["CCSWeaponBaseVData"]["fields"];
 	CCSPlayerBase_CameraServices_ = clientDLLOffsets["CCSPlayerBase_CameraServices"]["fields"];
 	C_PlantedC4_ = clientDLLOffsets["C_PlantedC4"]["fields"];
+	CCollisionProperty_ = clientDLLOffsets["CCollisionProperty"]["fields"];
+
+	CEntityInstance_ = clientDLLOffsets["CEntityInstance"]["fields"];
+    CEntityIdentity_ = clientDLLOffsets["CEntityIdentity"]["fields"];
+	CBodyComponentSkeletonInstance_ = clientDLLOffsets["CBodyComponentSkeletonInstance"]["fields"];
+	CModelState_ = clientDLLOffsets["CModelState"]["fields"];
+	CBodyComponent_ = clientDLLOffsets["CBodyComponent"]["fields"];
 
 	return 1;
 }
@@ -174,7 +181,7 @@ Vector3 C_CSPlayerPawn::getOrigin() {
 }
 
 Vector3 C_CSPlayerPawn::getCameraPos() {
-	cameraPos = MemMan.ReadMem<Vector3>(playerPawn + clientDLL::C_CSPlayerPawnBase_["m_vecLastClipCameraPos"]);
+	cameraPos = MemMan.ReadMem<Vector3>(playerPawn + clientDLL::C_CSPlayerPawn_["m_vecLastClipCameraPos"]);
 	return cameraPos;
 }
 
@@ -190,7 +197,7 @@ uintptr_t C_CSPlayerPawn::getCGameSceneNode() {
 }
 
 Vector3 C_CSPlayerPawn::getViewAngles() {
-	viewAngles = MemMan.ReadMem<Vector3>(playerPawn + clientDLL::C_CSPlayerPawnBase_["m_angEyeAngles"]);
+	viewAngles = MemMan.ReadMem<Vector3>(playerPawn + clientDLL::C_CSPlayerPawn_["m_angEyeAngles"]);
 	return viewAngles;
 }
 
@@ -200,13 +207,13 @@ Vector3 C_CSPlayerPawn::getPosition() {
 }
 
 uint16_t C_CSPlayerPawn::getWeaponID() {
-	C_CSWeaponBase = MemMan.ReadMem<uint64_t>(playerPawn + clientDLL::C_CSPlayerPawnBase_["m_pClippingWeapon"]);
+	C_CSWeaponBase = MemMan.ReadMem<uint64_t>(playerPawn + clientDLL::C_CSPlayerPawn_["m_pClippingWeapon"]);
 	weaponID = MemMan.ReadMem<uint16_t>(C_CSWeaponBase + clientDLL::C_EconItemView_["m_iItemDefinitionIndex"] + clientDLL::C_AttributeContainer_["m_Item"] + clientDLL::C_EconEntity_["m_AttributeManager"]);
 	return weaponID;
 }
 
 std::string C_CSPlayerPawn::getWeaponName() {
-	C_CSWeaponBase = MemMan.ReadMem<uint64_t>(playerPawn + clientDLL::C_CSPlayerPawnBase_["m_pClippingWeapon"]);
+	C_CSWeaponBase = MemMan.ReadMem<uint64_t>(playerPawn + clientDLL::C_CSPlayerPawn_["m_pClippingWeapon"]);
 	uint64_t weaponData = MemMan.ReadMem<uint64_t>(C_CSWeaponBase + clientDLL::C_BaseEntity_["m_nSubclassID"] + 0x8);
 	uint64_t weaponNameAddress = MemMan.ReadMem<uint64_t>(weaponData + clientDLL::CCSWeaponBaseVData_["m_szName"]);
 
@@ -268,7 +275,7 @@ uintptr_t LocalPlayer::getTeam() {
 }
 
 Vector3 LocalPlayer::getCameraPos() {
-	cameraPos = MemMan.ReadMem<Vector3>(playerPawn + clientDLL::C_CSPlayerPawnBase_["m_vecLastClipCameraPos"]);
+	cameraPos = MemMan.ReadMem<Vector3>(playerPawn + clientDLL::C_CSPlayerPawn_["m_vecLastClipCameraPos"]);
 	return cameraPos;
 }
 

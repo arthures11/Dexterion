@@ -42,6 +42,12 @@ namespace clientDLL {
 	nlohmann::json CCSWeaponBaseVData_;
 	nlohmann::json CCSPlayerBase_CameraServices_;
 	nlohmann::json C_PlantedC4_;
+	nlohmann::json CCollisionProperty_;
+	nlohmann::json CEntityInstance_;
+    nlohmann::json CEntityIdentity_;
+ nlohmann::json CBodyComponentSkeletonInstance_;
+ nlohmann::json CModelState_;
+  nlohmann::json CBodyComponent_;
 
 	bool load();
 };
