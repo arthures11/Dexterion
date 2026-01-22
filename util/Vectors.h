@@ -1,13 +1,14 @@
 #pragma once
 #pragma warning (disable: 4172)
 
-
-#define WIN32_LEAN_AND_MEAN 
+#define WIN32_LEAN_AND_MEAN
 
 #include <Windows.h>
 
+
 #include <numbers>
 #include <cmath>
+
 
 
 struct view_matrix_t {
@@ -35,6 +36,24 @@ struct Vector3 {
 		return Vector3{ x - other.x, y - other.y, z - other.z };
 	}
 
+
+	 Vector3 Cross(const Vector3& other) const {
+        return Vector3(
+            y * other.z - z * other.y,
+            z * other.x - x * other.z,
+            x * other.y - y * other.x
+        );
+    }
+
+	 Vector3 Normalize() const {
+        float len = this->Length(); // Use the Length() method we added before
+        if (len > 0) {
+            return Vector3{x / len, y / len, z / len};
+        }
+        // Return a zero vector if the original vector has no length to avoid division by zero
+        return Vector3{0, 0, 0};
+    }
+
 	constexpr const Vector3& operator+(const Vector3& other) const noexcept
 	{
 		return Vector3{ x + other.x, y + other.y, z + other.z };
@@ -44,6 +63,21 @@ struct Vector3 {
 	{
 		return Vector3{ x / factor, y / factor, z / factor };
 	}
+
+   float Length() const {
+        return sqrt(x * x + y * y + z * z);
+    }
+    float LengthSqr() const {
+        return x * x + y * y + z * z;
+    }
+	    float Dot(const Vector3& other) const {
+        return x * other.x + y * other.y + z * other.z;
+    }
+
+    // Inequality operator to compare two vectors
+    bool operator!=(const Vector3& other) const {
+        return x != other.x || y != other.y || z != other.z;
+    }
 
 	constexpr const Vector3& operator*(const float factor) const noexcept
 	{

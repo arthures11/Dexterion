@@ -1,0 +1,20 @@
+{
+  "ze_mochi_island": {
+    "left_tilt_names": [
+      "Last_T_move5_355", 
+      "Last_T_move6_361"
+    ],
+    "right_tilt_names": [
+      "Last_T_move4_359", 
+      "Last_T_move7_357"
+    ]
+  },
+  "ze_sandstorm_cs2": {
+    "left_tilt_names": [
+      "some_other_laser_name"
+    ],
+    "right_tilt_names": [
+      "another_laser_name_here"
+    ]
+  }
+}

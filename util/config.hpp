@@ -7,6 +7,9 @@
 
 #include "../json/jsonOps.hpp"
 
+
+
+
 struct espConfig {
 	// *--*--*--*--*--*Player ESP*--*--*--*--*--* \\ 
 	bool state;
@@ -62,6 +65,11 @@ struct espConfig {
 };
 espConfig espConf = {};
 
+enum class AutoLaserMode {
+	Off,
+	Normal,
+	FastJump
+};
 
 struct aimConfig {
 	bool state;
@@ -79,9 +87,9 @@ struct aimConfig {
 	std::vector<std::string> bones = { "Head", "Neck","Chest", "Crotch" };
 	std::map <std::string, int> boneMap = { {"Head",6},{"Neck",5},{"Chest",4},{"Crotch",0} };
 
-	int aimMode = 3;
-	std::vector<std::string> aimModes = { "Closest to Player", "Closest to Crosshair", "Furthest from crosshair", "No preference" };
-	std::map <std::string, int> aimModeMap = { {"Closest to Player",0},{"Closest to Crosshair",1},{"Furthest from crosshair",2},{"No preference",3} };
+	int aimMode = 4;
+	std::vector<std::string> aimModes = { "Closest to Player", "Closest to Crosshair", "Furthest from crosshair", "No preference", "WithinFOVClosest" };
+	std::map <std::string, int> aimModeMap = { {"Closest to Player",0},{"Closest to Crosshair",1},{"Furthest from crosshair",2},{"No preference",3},{"WithinFOVClosest",4} };
 
 	bool isHotAim;
 	int hotSelectAim = 0;
@@ -95,8 +103,8 @@ struct aimConfig {
 
 	bool playerLock;
 
-	std::vector<std::string> hotKey = { "SHIFT","ALT","CTRL","Left mouse","Right mouse" };
-	std::map <std::string, int> hotKeyMap = { {"SHIFT",VK_SHIFT}, {"ALT",VK_MENU},{"CTRL",VK_CONTROL},{"Left mouse",VK_LBUTTON},{"Right mouse",VK_RBUTTON} };
+	std::vector<std::string> hotKey = { "SHIFT","ALT","CTRL","Left mouse","Right mouse","X" };
+	std::map <std::string, int> hotKeyMap = { {"SHIFT",VK_SHIFT}, {"ALT",VK_MENU},{"CTRL",VK_CONTROL},{"Left mouse",VK_LBUTTON},{"Right mouse",VK_RBUTTON}, {"X",0x58} };
 
 	inline nlohmann::json to_json();
 	inline bool from_json(nlohmann::json json);
@@ -104,20 +112,35 @@ struct aimConfig {
 aimConfig aimConf = {};
 
 
+
 struct miscConfig {
 	bool itemESP;
 	bool deathmatchMode;
 	bool spectator;
 	bool bombTimer;
+	bool damageList;
+	bool bhopEnabled; // Bunny hop feature
+	float bhopJumpVelocityThreshold = -290.0f; // Added for configurable bhop jump velocity
+	int bhopSleep = 15625;
+	int bhopSleepForZero = 15625;
+	float latencyLasers = 0.0f;
+	int trigg = 0;
 	bool consoleVisible = true;
 	bool obsBypass = true;
 	float bombTimerColours[4] = { 0.f, 1.f, 0.5f, 1.f };
-	float spectatorColours[4] = { 1.f, 0.f, 0.f, 1.f };
-
+	float spectatorColours[4] = { 0.f, 1.f, 0.f, 1.f };
+	float damageListColours[4] = { 0.f, 1.f, 0.f, 1.f };
+	std::vector<std::string> itemESPFilter = { "te", "p2", "glo" }; // New: Configurable item ESP filter strings
+	float itemESPFontSize = 22.0f; // New: Configurable base font size for item ESP
+    bool autoLaserDodge = false; 
+    AutoLaserMode laserMode = AutoLaserMode::Off; 
 	inline nlohmann::json to_json();
 	inline bool from_json(nlohmann::json json);
 };
 miscConfig miscConf = {};
+
+
+
 
 //settings for configs
 const int MAX_CONFIGS = 32;
@@ -133,6 +156,10 @@ inline namespace config {
 	void create(std::wstring name);
 	bool exists(int index);
 }
+
+
+
+
 
 enum bones : int {
 	head            = 6,

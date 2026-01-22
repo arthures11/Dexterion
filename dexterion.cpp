@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN 
 
 #include <windows.h>
+
 #include <thread>
 #include <chrono>
 #include <format>
@@ -9,6 +10,9 @@
 #include "gui/overlay.hpp"
 #include "util/MemMan.hpp"
 #include "util/attributes.hpp"
+#include "features/misc.hpp" 
+#include <io.h>
+#include <fcntl.h>
 
 LRESULT Wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
@@ -32,61 +36,76 @@ LRESULT Wndproc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
 	AllocConsole();
+	_setmode(_fileno(stdout), _O_U16TEXT); 
+
 	freopen("CONOUT$", "w", stdout);
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
 	Logger::hConsole = hConsole;
 
 	// Memory and game related vars (used in entry and passed through overlay)
-	int procId = MemMan.getPid(L"cs2.exe");
+	 int procId = MemMan.getPid(L"cs2.exe");
+	//int procId = 8480;
+	//int procId = MemMan.getPidById(L"cs2.exe", 2044);
+
+	//Logger::info(std::to_string(procId));
 	// Weird method until I find a proper fix, im tired rn
-	if (procId == 0) {
-		Logger::info("[MemMan] Waiting For Counter Strike 2");
-		while ((procId = MemMan.getPid(L"cs2.exe")) == 0)
-			std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-	}
-	Logger::success(std::format("[MemMan] Counter Strike 2 Found (%d)!", procId));
-	Logger::info("[Config.hpp] Checking for config file...");
+	//if (procId == 0) {
+		//Logger::info("[MemMan] Waiting For Counter Strike 2");
+	//	while ((procId = MemMan.getPid(L"cs2.exe")) == 0)
+	//		std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+	//}
+	//Logger::info("STdf:");
+	//Logger::info(std::to_string(procId));
+	//Logger::success("LOL: "+procId);
+	//Logger::info("[Config.hpp] Checking for config file...");
 	config::refresh();
 	if (config::exists(0)) { // passing 0 cause setup
-		Logger::success("[Config.hpp] Config File Found! Loading config...");
+		//Logger::success("[Config.hpp] Config File Found! Loading config...");
 		config::load(0);
 	}
 	else {
-		Logger::error("[Config.hpp] Config File Not Found! Loading Defaults...");
+		//Logger::error("[Config.hpp] Config File Not Found! Loading Defaults...");
 		config::create(L"config.json");
 		config::save(0);
 	}
 	
-	Logger::info("[dexterion.cpp] Getting addresses...");
+	//Logger::info("[dexterion.cpp] Getting addresses...");
 	MemoryManagement::moduleData client;
 	client.module = MemMan.getModule(procId, L"client.dll");
 	client.base = MemMan.getModuleBase(procId, "client.dll");
-	while (client.base == 0 || client.module == 0) {
+	while (client.base == 0 || client.module == 0 || client.size ==0) {
 		client.module = MemMan.getModule(procId, L"client.dll");
 		client.base = MemMan.getModuleBase(procId, "client.dll");
-		std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+		client.size = MemMan.getModuleSize(procId, _T("client.dll")); 
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
+	    //Logger::info(std::format("Client Base: {:#x}, Size: {}", client.base, client.size)); // Add this log to confirm
+
 	if (!loadJson()) {
-		Logger::error("[attributes.cpp] Cannot load JSON files (did you run updateoffsets.cmd?)");
+		//Logger::error("[attributes.cpp] Cannot load JSON files (did you run updateoffsets.cmd?)");
 		system("pause");
 		return 0;
 	}
-	Logger::success("[dexterion.cpp] Addresses found succesfully!");
+	//Logger::success("[dexterion.cpp] Addresses found succesfully!");
 	
-	Logger::info("[dexterion.cpp] Creating overlay...");
+	//Logger::info("[dexterion.cpp] Creating overlay...");
 	// Overlay
 	overlayESP overlayClass;
-	WNDCLASSEXW windowClass = overlayClass.createWindowClass(hInstance, Wndproc, L"Dexterion");
+	WNDCLASSEXW windowClass = overlayClass.createWindowClass(hInstance, Wndproc, L"SteelSeries GG");
 	HWND window = overlayClass.createWindow(GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
 
-	Logger::info("[dexterion.cpp] Drawing overlay...");
+	//Logger::info("[dexterion.cpp] Drawing overlay...");
 	overlayClass.makeFrameIntoClientArea();
 	overlayClass.makeDeviceAndSwapChain();
 	overlayClass.initWindow(nShowCmd);
 
-	Logger::info("[overlay.cpp] Starting main loop...");
+	//Logger::info("[overlay.cpp] Starting main loop...");
+	//misc::startBhopThread(); 
 	overlayClass.renderLoop(client);
+	 
+	
 
 	return 0;
 }

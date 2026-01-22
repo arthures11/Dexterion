@@ -132,6 +132,8 @@ void esp::boundingBox(Vector3 origin, view_matrix_t viewMatrix, std::string name
 			if (!espConf.gradient) ImGui::GetBackgroundDrawList()->AddRect({ headPosToScreen.x - width, headPosToScreen.y }, { headPosToScreen.x + width, originalPosToScreen.y }, ImColor(espConf.cornerColours[0], espConf.cornerColours[1], espConf.cornerColours[2], espConf.cornerColours[3]), 0.f, 0.f, espConf.boundBoxThickness);
 			else Render::DrawGradientLine({ headPosToScreen.x - width, headPosToScreen.y }, { headPosToScreen.x + width, originalPosToScreen.y }, ImColor(espConf.cornerColours[0], espConf.cornerColours[1], espConf.cornerColours[2], espConf.cornerColours[3]), ImColor(espConf.cornerGradient[0], espConf.cornerGradient[1], espConf.cornerGradient[2], espConf.cornerGradient[3]), espConf.boundBoxThickness);
 			if (espConf.filledBox) ImGui::GetBackgroundDrawList()->AddRectFilled({ headPosToScreen.x - width, headPosToScreen.y }, { headPosToScreen.x + width, originalPosToScreen.y }, filledBoxcolour, 0.f, 0.f);
+
+			
 		}
 
 		if (espConf.isHealthBar) {

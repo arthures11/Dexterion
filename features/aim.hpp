@@ -11,6 +11,6 @@ namespace aim {
 	void aimBot(LocalPlayer localPlayer, Vector3 baseViewAngles, uintptr_t enemyPlayer, uintptr_t boneArray, MemoryManagement::moduleData client);
 	void moveMouseToLocation(Vector3 pos);
 	void triggerBot(LocalPlayer localPlayer, DWORD_PTR base);
-
+	Vector3 ImprovedCalculateAngle(Vector3 src, Vector3 dst, Vector3 viewAngles);
 	uintptr_t lockedPlayer = 0;
 }

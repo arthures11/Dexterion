@@ -9,22 +9,36 @@
 #include <tuple>
 #include <iostream>
 #include <Windows.h>
-
+#include <algorithm>
 #include "../imgui/imgui.h"
 #include "Vectors.h"
+#include <stringapiset.h>
 
 #include <comdef.h>
 #include <Wbemidl.h>
+#include <cctype>
+
+#undef min
+
 
 inline namespace Logger {
 	inline HANDLE hConsole;
 
-	inline std::wstring StrToWstr(std::string str)
-	{
-		std::wstring temp;
-		std::copy(str.begin(), str.end(), std::back_inserter(temp));
-		return temp;
-	}
+inline std::wstring StrToWstr(const std::string& str)
+{
+    if (str.empty()) {
+        return L"";
+    }
+    // CP_UTF8 is the crucial flag that tells the function our source is UTF-8
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+    if (size_needed <= 0) {
+        // You could add error logging here if you want
+        return L"";
+    }
+    std::wstring wstrTo(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
+    return wstrTo;
+}
 
 	// WString
 	inline void info(std::wstring str, bool endLine = true) {
@@ -91,10 +105,47 @@ inline namespace utils {
 		return sqrt(pow(to.x - from.x, 2) + pow(to.y - from.y, 2) + pow(to.z - from.z, 2));
 	};
 
+ inline std::string sanitizeString(const std::string& input) {
+        std::string cleaned;
+        cleaned.reserve(input.length()); // Pre-allocate memory for efficiency
+        for (char c : input) {
+            // isprint() checks for any printable character (letters, digits, punctuation, space)
+            // The cast to unsigned char is crucial for isprint to work correctly with all byte values.
+            if (isprint(static_cast<unsigned char>(c))) {
+                cleaned += c;
+            }
+        }
+        return cleaned;
+    }
+
+	  inline int levenshteinDistance(const std::string &s1, const std::string &s2) {
+        const size_t len1 = s1.size(), len2 = s2.size();
+        std::vector<unsigned int> col(len2 + 1), prevCol(len2 + 1);
+
+        for (unsigned int i = 0; i < prevCol.size(); i++) {
+            prevCol[i] = i;
+        }
+
+        for (unsigned int i = 0; i < len1; i++) {
+            col[0] = i + 1;
+            for (unsigned int j = 0; j < len2; j++) {
+                col[j + 1] = std::min({ prevCol[j + 1] + 1, col[j] + 1, prevCol[j] + (s1[i] == s2[j] ? 0 : 1) });
+            }
+            col.swap(prevCol);
+        }
+        return prevCol[len2];
+    }
+
 	inline std::string get_hwid() {
 		HW_PROFILE_INFO hwProfileInfo;
 		if (GetCurrentHwProfile(&hwProfileInfo))
 			return hwProfileInfo.szHwProfileGuid;
+	}
+
+	inline std::string toLower(std::string s) {
+		std::transform(s.begin(), s.end(), s.begin(),
+			[](unsigned char c){ return std::tolower(c); });
+		return s;
 	}
 
 	inline std::wstring getExePath() {
@@ -132,14 +183,28 @@ inline namespace utils {
 	}
 
 	inline namespace espF {
-		inline float fixFontSize(float size) {
-			int returnSize = 1;
+		// This function now returns a float reduction based on distance for font scaling
+		// The 'distance' parameter here is the distance in hundreds of units (e.g., 1 = 100 units)
+		// inline float fixFontSize(float distance) {
+		// 	// Define constants for scaling behavior
+		// 	const float max_reduction = 10.0f; // Maximum font size reduction
+		// 	const float scaling_factor = 0.5f; // How much to reduce per unit of 'distance' (hundreds of units)
 
-			if (size > 4.f) returnSize = 4.f;
-			if (size < 1.f) returnSize = 1.f;
+		// 	// Calculate a linear reduction based on distance
+		// 	float reduction = distance * scaling_factor;
 
-			return returnSize;
-		}
+		// 	// Cap the reduction to prevent font size from becoming too small or negative
+		// 	return std::min(reduction, max_reduction);
+		// }
+
+inline float fixFontSize(float distance) {
+    const float max_reduction = 16.0f;
+    const float scaling_factor = 0.16f;
+
+    float reduction = distance * scaling_factor;
+
+    return std::min(reduction, max_reduction);
+}
 
 		// This is with size being 5 !!!
 		inline float fixJointSize(float size) {

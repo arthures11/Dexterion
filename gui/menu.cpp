@@ -4,6 +4,7 @@
 #include "../util/config.hpp"
 #include "../util/DiscordVerify.hpp"
 #include "../util/utilFunctions.hpp"
+#include "../features/misc.hpp" // Required for misc::itemESPFilterMutex
 
 void imGuiMenu::setStyle() {
 		// Dexterion GUI style from ImThemes
@@ -231,12 +232,12 @@ void imGuiMenu::espRender() {
 void imGuiMenu::aimRender() {
 	if (tabCount == 2) {
 
-		ImGui::BeginChild("Aimbot", ImVec2(imGuiMenu::widthSeparatorInt, imGuiMenu::heightSeparatorInt), true);
+		ImGui::BeginChild("bot", ImVec2(imGuiMenu::widthSeparatorInt, imGuiMenu::heightSeparatorInt), true);
 		ImGui::PushFont(imGuiMenu::titleText);
-		ImGui::Text("Aimbot");
+		ImGui::Text("bot");
 		ImGui::PopFont();
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::Checkbox("Aimbot", &aimConf.state);
+		ImGui::Checkbox("bot", &aimConf.state);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 		ImGui::Checkbox("Fov circle", &aimConf.fovCircle);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
@@ -253,16 +254,16 @@ void imGuiMenu::aimRender() {
 
 		ImGui::BeginChild("Misc", ImVec2(0, imGuiMenu::heightSeparatorInt), true);
 		ImGui::PushFont(imGuiMenu::titleText);
-		ImGui::Text("Miscellaneous aim functions");
+		ImGui::Text("misc functions");
 		ImGui::PopFont();
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::Checkbox("Recoil Control", &aimConf.rcs);
+		ImGui::Checkbox("Rec Cont", &aimConf.rcs);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 		ImGui::Checkbox("Player lock", &aimConf.playerLock);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::Checkbox("Trigger Bot", &aimConf.trigger);
+		ImGui::Checkbox("gger Bot", &aimConf.trigger);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::Checkbox("Trigger bot hot key", &aimConf.isHotTrigger);
+		ImGui::Checkbox("gger bot hot key", &aimConf.isHotTrigger);
 		if (aimConf.isHotTrigger) {
 			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 			if (ImGui::BeginCombo("Hot key", aimConf.hotKey[aimConf.hotSelectTrigger].c_str())) {
@@ -281,7 +282,7 @@ void imGuiMenu::aimRender() {
 			}
 		}
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		if (ImGui::BeginCombo("Aimbot Preference", aimConf.aimModes[aimConf.aimMode].c_str())) {
+		if (ImGui::BeginCombo("bot Preference", aimConf.aimModes[aimConf.aimMode].c_str())) {
 			for (int i = 0; i < aimConf.aimModes.size(); ++i) {
 				const bool isSelected = (aimConf.aimMode == i);
 
@@ -319,7 +320,7 @@ void imGuiMenu::aimRender() {
 			ImGui::EndCombo();
 		}
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::Checkbox("Aim bot hot key", &aimConf.isHotAim);
+		ImGui::Checkbox("bot hot key", &aimConf.isHotAim);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 		if (aimConf.isHotAim) {
 			if (ImGui::BeginCombo("Hot key", aimConf.hotKey[aimConf.hotSelectAim].c_str())) {
@@ -358,6 +359,26 @@ void imGuiMenu::miscRender() {
 			SetWindowDisplayAffinity(GetForegroundWindow(), miscConf.obsBypass ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
 			Shared::lastAffinity = miscConf.obsBypass ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
 		}
+		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+		ImGui::Checkbox("Spectator List", &miscConf.spectator);
+		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+		ImGui::Checkbox("Damage List", &miscConf.damageList);
+		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+		ImGui::Checkbox("Bunny Hop", &miscConf.bhopEnabled);
+		if (miscConf.bhopEnabled) { // Show slider only if bhop is enabled
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+			ImGui::SliderFloat("Bhop Vel Thresh", &miscConf.bhopJumpVelocityThreshold, -350.0f, -50.0f, "%.1f"); // Added Slider
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+			ImGui::InputInt("NormSleep", &miscConf.bhopSleep);
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+			ImGui::InputInt("Zerosleep", &miscConf.bhopSleepForZero);
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+			ImGui::InputInt("ErrorTrigg", &miscConf.trigg);
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+			ImGui::SliderFloat("latencyLasers", &miscConf.latencyLasers, 0.0f, 0.10f, "%.2f");
+
+
+		}
 		ImGui::EndChild();
 
 		verticalSplitter(imGuiMenu::widthSeparatorInt, imGuiMenu::heightSeparatorInt);
@@ -368,6 +389,8 @@ void imGuiMenu::miscRender() {
 		ImGui::PopFont();
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 		ImGui::ColorEdit4("Spectator List", (float*)&miscConf.spectatorColours);
+		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+		ImGui::ColorEdit4("Damage List", (float*)&miscConf.damageListColours);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 		ImGui::ColorEdit4("Bomb Timer", (float*)&miscConf.bombTimerColours);
 		ImGui::EndChild();
@@ -383,60 +406,48 @@ void imGuiMenu::miscRender() {
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 		ImGui::Checkbox("Dropped Item ESP", &miscConf.itemESP);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+		if (miscConf.itemESP) {
+			ImGui::PushFont(imGuiMenu::subTitleText);
+			ImGui::Text("filter (one per line)");
+			ImGui::PopFont();
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+			ImGui::BeginChild("##iFilter", ImVec2(0, 100), true, ImGuiWindowFlags_HorizontalScrollbar); // Reduced height
+			{
+				std::lock_guard<std::mutex> lock(misc::itemESPFilterMutex); // Protect access
+				for (int i = 0; i < miscConf.itemESPFilter.size(); ++i) {
+					char buffer[256];
+					strcpy_s(buffer, sizeof(buffer), miscConf.itemESPFilter[i].c_str());
+					ImGui::PushID(i);
+					ImGui::InputText("##filter", buffer, sizeof(buffer));
+					miscConf.itemESPFilter[i] = buffer;
+					ImGui::SameLine();
+					if (ImGui::Button("-")) {
+						miscConf.itemESPFilter.erase(miscConf.itemESPFilter.begin() + i);
+						i--; // Adjust index after removal
+					}
+					ImGui::PopID();
+				}
+				if (ImGui::Button("Add New Filter")) {
+					miscConf.itemESPFilter.push_back("");
+				}
+			} // Lock released
+			ImGui::EndChild();
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+			ImGui::SliderFloat("Font Size", &miscConf.itemESPFontSize, 8.0f, 24.0f, "%.1f"); // New: Font size slider
+			ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+		}
 		ImGui::Checkbox("Spectator List", &miscConf.spectator);
 		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
 		ImGui::Checkbox("Bomb Timer", &miscConf.bombTimer);
+		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
+		ImGui::Checkbox("Bunny Hop", &miscConf.bhopEnabled);
 		ImGui::EndChild();
 	}
 }
 
 void imGuiMenu::aboutMeRender() {
 	if (tabCount == 4) {
-		ImGui::BeginChild("About the project", ImVec2(0, 0), true);
-		ImGui::PushFont(imGuiMenu::titleText);
-		ImGui::Text("Github");
-		ImGui::PopFont();
-		ImGui::TextLinkOpenURL("Dexterion Github", "https://github.com/Skwrr/Dexterion");
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::TextLinkOpenURL("Tim Apple Github Fork", "https://github.com/kristofhracza/tim_apple");
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::PushFont(imGuiMenu::titleText);
-		ImGui::Text("HackVsHack");
-		ImGui::PopFont();
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::PushFont(imGuiMenu::subTitleText);
-		ImGui::Text("Release thread");
-		ImGui::PopFont();
-		ImGui::TextLinkOpenURL("Dexterion", "https://hackvshack.net/threads/dexterion-semi-external-cs2-cheat-updated-10-07-2024.4978/");
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::PushFont(imGuiMenu::titleText);
-		ImGui::Text("UnknownCheats");
-		ImGui::PopFont();
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::PushFont(imGuiMenu::subTitleText);
-		ImGui::Text("Release thread");
-		ImGui::PopFont();
-		ImGui::TextLinkOpenURL("Dexterion", " https://www.unknowncheats.me/forum/counter-strike-2-a/647464-dexterion-semi-external-cs2-cheat.html");
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::TextLinkOpenURL("Tim Apple", "https://www.unknowncheats.me/forum/counter-strike-2-releases/609206-cs2-external-cheat-tim-apple.html");
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::PushFont(imGuiMenu::subTitleText);
-		ImGui::Text("Developer Profile");
-		ImGui::PopFont();
-		ImGui::TextLinkOpenURL("UC Author Profile", "https://www.unknowncheats.me/forum/members/6169955.html");
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::TextLinkOpenURL("Discord", "https://www.unknowncheats.me/forum/members/6169955.html");
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::PushFont(imGuiMenu::titleText);
-		ImGui::Text("Discord");
-		ImGui::PopFont();
-		ImGui::TextLinkOpenURL("Click me!", "https://discord.gg/jwueZBpnyY");
-		ImGui::Dummy(ImVec2(0.0f, textSeparatorSpace));
-		ImGui::PushFont(imGuiMenu::titleText);
-		ImGui::Text(("Version: " + utils::version).c_str());
-		ImGui::EndChild();
+		
 	}
 }
 
@@ -481,13 +492,13 @@ void imGuiMenu::accountRender() {
 
 		if (ImGui::Button("Copy My Token", ImVec2(150, 40))) {
 			ImGui::LogToClipboard();
-			ImGui::LogText(DiscordVerify::getToken(Shared::steamId).c_str());
+			//ImGui::LogText(DiscordVerify::getToken(Shared::steamId).c_str());
 			ImGui::LogFinish();
 			ImGui::OpenPopup("CopyToken");
 		}
 
 		if (ImGui::BeginPopupModal("CopyToken", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
-			ImGui::Text("Your token has been copied to your clipboard!");
+			//ImGui::Text("Your token has been copied to your clipboard!");
 			ImGui::Separator();
 			if (ImGui::Button("OK", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
 			ImGui::EndPopup();
@@ -514,7 +525,7 @@ void imGuiMenu::menuBar() {
 void imGuiMenu::renderMenu(bool state) {
 	ImGui::PushFont(normalText);
 	ImGui::SetNextWindowSize({WIDTH,HEIGHT}, ImGuiCond_FirstUseEver);
-	ImGui::Begin("Dexterion", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoCollapse);
+	ImGui::Begin("SteelSeries GG", NULL, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoCollapse);
 	
 	// Config
 	setStyle();

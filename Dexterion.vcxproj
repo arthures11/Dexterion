@@ -24,7 +24,7 @@
     <ProjectGuid>{e6cbdc8b-c819-4a41-85b1-27203f206e29}</ProjectGuid>
     <RootNamespace>dexterion</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>Dexterion</ProjectName>
+    <ProjectName>SteelSeries GG</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -138,11 +138,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="features\aim.hpp" />
+    <ClInclude Include="features\base64.h" />
     <ClInclude Include="features\bomb.hpp" />
     <ClInclude Include="features\entry.hpp" />
     <ClInclude Include="features\esp.hpp" />
     <ClInclude Include="features\include.hpp" />
     <ClInclude Include="features\misc.hpp" />
+    <ClInclude Include="features\stb_image_write.h" />
+    <ClInclude Include="features\timeddraw.hpp" />
     <ClInclude Include="gui\menu.hpp" />
     <ClInclude Include="gui\overlay.hpp" />
     <ClInclude Include="imgui\imconfig.h" />
@@ -540,10 +543,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="features\aim.cpp" />
+    <ClCompile Include="features\base64.cpp" />
     <ClCompile Include="features\bomb.cpp" />
     <ClCompile Include="features\entry.cpp" />
     <ClCompile Include="features\esp.cpp" />
     <ClCompile Include="features\misc.cpp" />
+    <ClCompile Include="features\timeddraw.cpp" />
     <ClCompile Include="gui\menu.cpp" />
     <ClCompile Include="gui\overlay.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />

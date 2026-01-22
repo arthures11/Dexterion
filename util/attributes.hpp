@@ -37,11 +37,19 @@ namespace clientDLL {
 	nlohmann::json CSkeletonInstance_;
 	nlohmann::json CGameSceneNode_;
 	nlohmann::json EntitySpottedState_t_;
+	nlohmann::json CCSPlayer_BulletServices_;
 	nlohmann::json C_CSGameRules_;
 	nlohmann::json CCSWeaponBaseVData_;
 	nlohmann::json CCSPlayerBase_CameraServices_;
 	nlohmann::json C_PlantedC4_;
-
+	nlohmann::json CCollisionProperty_;
+	nlohmann::json CEntityInstance_;
+    nlohmann::json CEntityIdentity_;
+ nlohmann::json CBodyComponentSkeletonInstance_;
+ nlohmann::json CModelState_;
+  nlohmann::json CBodyComponent_;
+    const uintptr_t C_BaseEntity_m_pGameSceneNode = 816;
+    const uintptr_t CGameSceneNode_m_hParent = 120; // This is a CGameSceneNodeHandle
 	bool load();
 };
 
@@ -82,7 +90,9 @@ public:
 	bool spectating;
 	bool isSpectating(bool localPlayer);
 
-	uintptr_t spectatorTarget;
+    uint32_t currentGameTick();
+
+    uintptr_t spectatorTarget;
 	uintptr_t getSpectating();
 
 	uintptr_t pawnTeam;
@@ -155,7 +165,10 @@ public:
 	int spotted;
 	int getEntitySpotted();
 
-	int owner;
+	int32_t bulletService;
+	int32_t getBulletService();
+
+    int owner;
 	int getOwner();
 
 	// CGameSceneNode
@@ -244,7 +257,10 @@ public:
 	int flags;
 	int getFlags();
 
-	C_UTL_VECTOR aimPunchCache;
+	int groundEntity;
+    int getGroundEntity();
+
+    C_UTL_VECTOR aimPunchCache;
 	C_UTL_VECTOR getAimPunchCache();
 
 	Vector2 aimPunchAngle;
