@@ -1,6 +1,6 @@
 #include "overlay.hpp"
 #include "menu.hpp"
-#include "thread";
+#include "thread"
 
 #include "../util/Vectors.h"
 #include "../util/MemMan.hpp"

@@ -195,7 +195,7 @@ const int trigger_cooldown()
 }
 
 void aim::triggerBot(LocalPlayer localPlayer, DWORD_PTR base) {
-	int crossHairEntity = MemMan.ReadMem<int>(localPlayer.getPlayerPawn() + clientDLL::C_CSPlayerPawnBase_["m_iIDEntIndex"]);
+	int crossHairEntity = MemMan.ReadMem<int>(localPlayer.getPlayerPawn() + clientDLL::C_CSPlayerPawn_["m_iIDEntIndex"]);
 	int localPlayerHealth = MemMan.ReadMem<int>(localPlayer.getPlayerPawn() + clientDLL::C_BaseEntity_["m_iHealth"]);
 	if (!crossHairEntity) return;
 

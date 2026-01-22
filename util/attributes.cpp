@@ -75,7 +75,7 @@ uintptr_t CCSPlayerController::getListEntry() {
 }
 
 uintptr_t CCSPlayerController::getController() {
-	value = MemMan.ReadMem<uintptr_t>(listEntry + 0x78 * (id & 0x1FF));
+	value = MemMan.ReadMem<uintptr_t>(listEntry + 0x70 * (id & 0x1FF));
 	return value;
 }
 
@@ -94,7 +94,7 @@ uintptr_t getAddressBase(uintptr_t entityList, uintptr_t playerPawn) {
 	uintptr_t listEntrySecond = MemMan.ReadMem<uintptr_t>(entityList + 0x8 * ((playerPawn & 0x7FFF) >> 9) + 16);
 	return listEntrySecond == 0
 		? 0
-		: MemMan.ReadMem<uintptr_t>(listEntrySecond + 120 * (playerPawn & 0x1FF));
+		: MemMan.ReadMem<uintptr_t>(listEntrySecond + 112 * (playerPawn & 0x1FF));
 }
 
 bool CCSPlayerController::isSpectating(bool localPlayer)
@@ -105,7 +105,7 @@ bool CCSPlayerController::isSpectating(bool localPlayer)
 	if (!list_entry2)
 		return false;
 
-	const uintptr_t CSlocalPlayerPawn = MemMan.ReadMem<uintptr_t>(list_entry2 + 120 * (localPlayerPawn & 0x1FF));
+	const uintptr_t CSlocalPlayerPawn = MemMan.ReadMem<uintptr_t>(list_entry2 + 112 * (localPlayerPawn & 0x1FF));
 
 	if (localPlayer)
 		return this->getSpectating() == CSlocalPlayerPawn;
@@ -165,13 +165,14 @@ uintptr_t C_CSPlayerPawn::getListEntry() {
 }
 
 uintptr_t C_CSPlayerPawn::getPlayerPawn() {
-	playerPawn = MemMan.ReadMem<uintptr_t>(listEntry + 0x78 * (value & 0x1FF));
+	playerPawn = MemMan.ReadMem<uintptr_t>(listEntry + 0x70 * (value & 0x1FF));
+
 	return playerPawn;
 }
 
 uintptr_t C_CSPlayerPawn::getPlayerPawnByCrossHairID(int crossHairEntity) {
 	uintptr_t crosshairEntityEntry = MemMan.ReadMem<uintptr_t>(entityList + 0x8 * (crossHairEntity >> 9) + 0x10);
-	playerPawn = MemMan.ReadMem<uintptr_t>(crosshairEntityEntry + 0x78 * (crossHairEntity & 0x1FF));
+	playerPawn = MemMan.ReadMem<uintptr_t>(crosshairEntityEntry + 0x70 * (crossHairEntity & 0x1FF));
 	return playerPawn;
 }
 
@@ -310,7 +311,7 @@ int LocalPlayer::getGroundEntity() {
 }
 
 C_UTL_VECTOR LocalPlayer::getAimPunchCache() {
-	aimPunchCache = MemMan.ReadMem<C_UTL_VECTOR>(playerPawn + clientDLL::C_CSPlayerPawn_["m_aimPunchCache"]);
+	aimPunchCache = MemMan.ReadMem<C_UTL_VECTOR>(playerPawn + 0x16F0);
 	return aimPunchCache;
 }
 
@@ -355,7 +356,7 @@ bool SharedFunctions::spottedCheck(C_CSPlayerPawn C_CSPlayerPawn, LocalPlayer lo
 	
 	// Also check if we're directly looking at the entity (crosshair ID check)
 	// This is a game feature that only works when you're directly looking at a visible player
-	int crosshairId = MemMan.ReadMem<int>(localPlayer.getPlayerPawn() + clientDLL::C_CSPlayerPawnBase_["m_iIDEntIndex"]);
+	int crosshairId = MemMan.ReadMem<int>(localPlayer.getPlayerPawn() + clientDLL::C_CSPlayerPawn_["m_iIDEntIndex"]);
 	
 	// Extract the entity from the crosshair target
 	if (crosshairId > 0) {
@@ -363,7 +364,7 @@ bool SharedFunctions::spottedCheck(C_CSPlayerPawn C_CSPlayerPawn, LocalPlayer lo
 			MemMan.ReadMem<uintptr_t>(localPlayer.base + offsets::clientDLL["dwEntityList"]) + 
 			0x8 * ((crosshairId) >> 9) + 0x10);
 			
-		uintptr_t crosshairEntity = MemMan.ReadMem<uintptr_t>(crosshairEntityEntry + 0x78 * (crosshairId & 0x1FF));
+		uintptr_t crosshairEntity = MemMan.ReadMem<uintptr_t>(crosshairEntityEntry + 0x70 * (crosshairId & 0x1FF));
 		
 		// If the crosshair is on the entity we're checking, it must be visible
 		if (crosshairEntity == C_CSPlayerPawn.playerPawn) {

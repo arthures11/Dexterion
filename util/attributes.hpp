@@ -48,7 +48,8 @@ namespace clientDLL {
  nlohmann::json CBodyComponentSkeletonInstance_;
  nlohmann::json CModelState_;
   nlohmann::json CBodyComponent_;
-
+    const uintptr_t C_BaseEntity_m_pGameSceneNode = 816;
+    const uintptr_t CGameSceneNode_m_hParent = 120; // This is a CGameSceneNodeHandle
 	bool load();
 };
 

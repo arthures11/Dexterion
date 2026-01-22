@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN 
 
 #include <windows.h>
+
 #include <thread>
 #include <chrono>
 #include <format>
@@ -45,15 +46,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	// Memory and game related vars (used in entry and passed through overlay)
 	 int procId = MemMan.getPid(L"cs2.exe");
 	//int procId = 8480;
-	//==int procId = MemMan.getPid(L"cs2.exe", 12992);
+	//int procId = MemMan.getPidById(L"cs2.exe", 2044);
 
 	//Logger::info(std::to_string(procId));
 	// Weird method until I find a proper fix, im tired rn
-	if (procId == 0) {
+	//if (procId == 0) {
 		//Logger::info("[MemMan] Waiting For Counter Strike 2");
-		while ((procId = MemMan.getPid(L"cs2.exe")) == 0)
-			std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-	}
+	//	while ((procId = MemMan.getPid(L"cs2.exe")) == 0)
+	//		std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+	//}
 	//Logger::info("STdf:");
 	//Logger::info(std::to_string(procId));
 	//Logger::success("LOL: "+procId);
@@ -78,9 +79,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 		client.base = MemMan.getModuleBase(procId, "client.dll");
 		client.size = MemMan.getModuleSize(procId, _T("client.dll")); 
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
-	    Logger::info(std::format("Client Base: {:#x}, Size: {}", client.base, client.size)); // Add this log to confirm
+	    //Logger::info(std::format("Client Base: {:#x}, Size: {}", client.base, client.size)); // Add this log to confirm
 
 	if (!loadJson()) {
 		//Logger::error("[attributes.cpp] Cannot load JSON files (did you run updateoffsets.cmd?)");

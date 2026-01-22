@@ -80,6 +80,20 @@
         "xlocnum": "cpp",
         "xloctime": "cpp",
         "xmemory": "cpp",
-        "xtr1common": "cpp"
+        "xtr1common": "cpp",
+        "cfenv": "cpp",
+        "complex": "cpp",
+        "condition_variable": "cpp",
+        "cstdarg": "cpp",
+        "cwctype": "cpp",
+        "memory_resource": "cpp",
+        "queue": "cpp",
+        "shared_mutex": "cpp",
+        "source_location": "cpp",
+        "stack": "cpp",
+        "stdfloat": "cpp",
+        "strstream": "cpp",
+        "typeindex": "cpp",
+        "variant": "cpp"
     }
 }

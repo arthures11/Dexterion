@@ -1,13 +1,14 @@
 #pragma once
 #pragma warning (disable: 4172)
 
-
-#define WIN32_LEAN_AND_MEAN 
+#define WIN32_LEAN_AND_MEAN
 
 #include <Windows.h>
 
+
 #include <numbers>
 #include <cmath>
+
 
 
 struct view_matrix_t {

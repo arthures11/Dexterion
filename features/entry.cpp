@@ -154,6 +154,29 @@ if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
 }
 
 
+static bool leftArrowWasPressed = false; 
+
+// Check if the Left Arrow key is currently held down.
+if (GetAsyncKeyState(VK_LEFT) & 0x8000) {
+    // If it is held down, check if this is the *first frame* it was pressed.
+    if (!leftArrowWasPressed) {
+        // Mark the key as pressed so this code only runs once per key press.
+        leftArrowWasPressed = true;
+        
+        // --- ACTION TO PERFORM ON KEY PRESS ---
+        // This is where you put the logic you want to execute.
+        
+        // 1. Clear the universal tracker.
+        misc::g_universal_tracker.clear();
+        
+        // 2. Log a message to the console so you know it worked.
+        Logger::info("Universal tracker blacklist has been manually cleared!"); 
+    }
+} else {
+    // If the key is NOT held down, reset the state tracker.
+    leftArrowWasPressed = false;
+}
+
 
     //misc::DrawAllDebugBoxes(); 
 
@@ -181,6 +204,8 @@ if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
         ImGui::Text("AutoLaser: ");
     }
 		ImGui::Text("Bone: %s", getBoneName(aimConf.boneSelect));
+	ImGui::Text("Blacklisted: %d", static_cast<int>(misc::g_universal_tracker.size()));
+
 		ImGui::End();
 	}
 
@@ -193,13 +218,14 @@ if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
 		misc::drawTriggerMessage();
 
 	// std::unordered_map<std::string, std::pair<int, uintptr_t>> playerDamageMap;
-	std::unordered_map<std::string, std::tuple<int, int, uintptr_t>> playerDamageMap;
+	std::unordered_map<std::string, std::tuple<float, int, uintptr_t>> playerDamageMap;
 
 	static int lastDamageUpdateTime = 0;
 	int currentTime = misc::getCurrentTimestamp();
 	std::vector<std::string> spectators{};
 
 	 logPlayerNameToFile("-----------------------------------------------------------------------");
+	 
 	for (int i = 1; i <= 64; i++)
 	{
 		// Player controller
@@ -218,6 +244,7 @@ if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
 		C_CSPlayerPawn.getPlayerPawn();
 		C_CSPlayerPawn.getPawnHealth();
 
+
 		if (currentTime - lastDamageUpdateTime >= 10)
 		{
 			uintptr_t actionServices = MemMan.ReadMem<uintptr_t>(
@@ -227,9 +254,9 @@ if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
 			if (!actionServices)
 				continue;
 
-			uint32_t totalDamage = MemMan.ReadMem<uint32_t>(
+			float totalDamage = MemMan.ReadMem<float>(
 				actionServices +
-				clientDLL::clientDLLOffsets["CCSPlayerController_ActionTrackingServices"]["fields"]["m_unTotalRoundDamageDealt"]);
+				clientDLL::clientDLLOffsets["CCSPlayerController_ActionTrackingServices"]["fields"]["m_flTotalRoundDamageDealt"]);
 
 			uintptr_t bulletServices = MemMan.ReadMem<uintptr_t>(
 				C_CSPlayerPawn.playerPawn +
@@ -301,7 +328,7 @@ if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
 				playerDamageMap[CCSPlayerController.pawnName] = {totalDamage, totalHits, CCSPlayerController.value};
 			}
 		}
-
+	
 		// Spectator List
 		if (miscConf.spectator && CCSPlayerController.isSpectating(true))
 			spectators.push_back(CCSPlayerController.pawnName);
@@ -483,7 +510,7 @@ if (GetAsyncKeyState(VK_DOWN) & 0x8000) {
 
 		for (const auto &[name, damageInfo] : playerDamageMap)
 		{
-			int totalDamage = std::get<0>(damageInfo);
+			float totalDamage = std::get<0>(damageInfo);
 			int totalHits = std::get<1>(damageInfo);
 			uintptr_t handle = std::get<2>(damageInfo);
 

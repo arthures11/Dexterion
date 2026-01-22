@@ -10,10 +10,9 @@
 #include <string>
 #include <atomic>
 #include <mutex>
-#include <vector> // Include vector header
+#include <vector>
 #include <optional>
-#include <tesseract/baseapi.h>
-#include <leptonica/allheaders.h>
+#include <set>
 
 namespace misc
 {
@@ -44,6 +43,26 @@ struct DisplayedMessage {
     // --- End of feature-specific declarations ---
 
 
+        enum class ObjectState
+    {
+        Observing,
+        Monitoring,
+        Threat,
+        Handled, // NEW STATE: A handler thread is watching this, don't touch it.
+        Dodged   // This state might not be needed anymore, but we can keep it.
+    };
+
+    std::vector<uintptr_t> g_cleanupQueue;
+    std::mutex g_cleanupMutex;
+
+    struct TrackedObject
+    {
+        uintptr_t pawn_address; // Unique ID
+        Vector3 last_position;
+        std::chrono::steady_clock::time_point first_seen_time;
+        ObjectState state = ObjectState::Observing; // Start in observing state
+    };
+    extern std::vector<TrackedObject> g_universal_tracker;
     // This function is the public interface to draw the messages
 
 
@@ -68,6 +87,7 @@ struct DisplayedMessage {
     extern	std::atomic<bool> g_stopChatMonitorThread;
 	extern std::atomic<bool> isChatMonitorEnabled;
     extern std::atomic<bool> isCrouchOnly;
+
     void AngleVectors(const Vector3& angles, Vector3* forward, Vector3* right, Vector3* up);
     Vector3 AngleToForwardVector(const Vector3& angles);
     // In misc.hpp

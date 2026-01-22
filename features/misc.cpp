@@ -1,7 +1,8 @@
-#include "misc.hpp"
+#include "misc.hpp" // This now handles all the core includes in the right order
+
+
 #include "../util/config.hpp"
 #include <atomic>
-#include <windows.h>
 #include <thread>
 #include <chrono>
 #include "timeddraw.hpp"
@@ -9,7 +10,6 @@
 #include <sstream>
 #include <memory>
 #include <string>
-#include <vector>
 #include <numeric>  // For std::accumulate
 #include <deque>   // <-- Make sure to include this at the top of your file
 
@@ -27,7 +27,7 @@ std::atomic<bool> misc::g_is_universal_threat_enabled2 = false;
 std::atomic<bool> misc::g_stopChatMonitorThread = false;
 std::atomic<bool> misc::isChatMonitorEnabled = false;
 std::atomic<bool> misc::isCrouchOnly = false;
-// In misc.cpp's anonymous namespace
+
 
 // --- Auto Laser Dodge Globals ---
 
@@ -43,6 +43,12 @@ struct DebugBox
     ImVec2 screenCorners[8];
     bool shouldDraw = false;
 };
+
+namespace misc 
+{
+    // The one and only definition of the variable
+    std::vector<TrackedObject> g_universal_tracker; 
+}
 
 // A global vector to hold all boxes we want to draw this frame
 inline std::vector<DebugBox> g_debugBoxesToDraw;
@@ -66,30 +72,11 @@ namespace
         float distance;
     };
 
-    enum class ObjectState
-    {
-        Observing,
-        Monitoring,
-        Threat,
-        Handled, // NEW STATE: A handler thread is watching this, don't touch it.
-        Dodged   // This state might not be needed anymore, but we can keep it.
-    };
 
-    std::vector<uintptr_t> g_cleanupQueue;
-    std::mutex g_cleanupMutex;
-
-    struct TrackedObject
-    {
-        uintptr_t pawn_address; // Unique ID
-        Vector3 last_position;
-        std::chrono::steady_clock::time_point first_seen_time;
-        ObjectState state = ObjectState::Observing; // Start in observing state
-    };
-    std::vector<TrackedObject> g_universal_tracker;
     auto g_blacklist_refresh_time = std::chrono::steady_clock::now();
     std::thread g_universal_threat_thread;
     std::atomic<bool> g_stop_universal_threat_thread = false;
-    extern std::atomic<bool> g_is_universal_threat_enabled = false;
+     std::atomic<bool> g_is_universal_threat_enabled = false;
 
     // The flag for your bhopWorker to read
     std::atomic<bool> g_isHighLaserThreat = false;
@@ -270,7 +257,7 @@ namespace
         if (!listEntry)
             return 0;
 
-        uintptr_t pCSPlayerPawn = memManager.ReadMem<uintptr_t>(listEntry + (120 * (index & 0x1FF)));
+        uintptr_t pCSPlayerPawn = memManager.ReadMem<uintptr_t>(listEntry + (112 * (index & 0x1FF)));
         return pCSPlayerPawn;
     }
 
@@ -378,16 +365,48 @@ namespace
         Logger::info("--- End of Dump ---");
     }
 
+    
+    std::string getModelNameFromPawn(uintptr_t pawn, MemoryManagement &memManager)
+    {
+        // This function implements the logic found in the server-side CBaseModelEntity::GetModelName()
+
+        // 1. C_BaseEntity -> m_CBodyComponent
+        uintptr_t pBodyComponent = memManager.ReadMem<uintptr_t>(pawn + clientDLL::C_BaseEntity_["m_CBodyComponent"]);
+        if (!pBodyComponent)
+            return "[No BodyComponent]";
+
+        // 2. CBodyComponent -> m_pSceneNode
+        // This is the pointer to what should be the CSkeletonInstance for a model entity.
+        uintptr_t pSceneNode = memManager.ReadMem<uintptr_t>(pBodyComponent + clientDLL::CBodyComponent_["m_pSceneNode"]);
+        if (!pSceneNode)
+            return "[No SceneNode]";
+
+        // 3. CSkeletonInstance -> m_modelState (Embedded struct)
+        // The pSceneNode *is* the CSkeletonInstance.
+        uintptr_t pModelState = pSceneNode + clientDLL::CSkeletonInstance_["m_modelState"];
+
+        // 4. CModelState -> m_ModelName (Pointer to string)
+        uintptr_t pModelNameString = memManager.ReadMem<uintptr_t>(pModelState + clientDLL::CModelState_["m_ModelName"]);
+        if (!pModelNameString)
+            return "[No ModelName Ptr]";
+
+        // 5. Read the actual string
+        char modelNameBuffer[256]{};
+        memManager.ReadRawMem(pModelNameString, modelNameBuffer, sizeof(modelNameBuffer) - 1);
+
+        return std::string(modelNameBuffer);
+    }
+
     // The Ultimate Diagnostic Tool
-    void inspectEntity(uintptr_t pawn, MemoryManagement &memManager)
+    void inspectEntity(uintptr_t pawn, MemoryManagement &memManager, int i)
     {
         // This static set ensures we only print this massive log ONCE per unique threat pawn address.
-        static std::set<uintptr_t> alreadyInspected;
-        if (alreadyInspected.count(pawn))
-        {
-            return;
-        }
-        alreadyInspected.insert(pawn);
+        // static std::set<uintptr_t> alreadyInspected;
+        // if (alreadyInspected.count(pawn))
+        // {
+        //     return;
+        // }
+        // alreadyInspected.insert(pawn);
 
         Logger::info("======================================================================");
         Logger::info(std::format("ENTITY INSPECTOR: Full Data Dump for Pawn @ {:#x}", pawn));
@@ -401,14 +420,24 @@ namespace
         }
 
         // --- CEntityIdentity ---
+        const uintptr_t CEntityIdentity_m_nameStringableIndex = 20;
+
         uintptr_t pEntityIdentity = memManager.ReadMem<uintptr_t>(pawn + 0x10); // CEntityInstance::m_pEntity
         if (pEntityIdentity)
         {
             std::string name = readStringFromPointer(pEntityIdentity, 0x18, memManager);
             std::string designerName = readStringFromPointer(pEntityIdentity, 0x20, memManager);
-            Logger::warn("[CEntityIdentity]");
+                        //std::string mod = getModelNameFromPawn(pEntityIdentity, memManager);
+                        std::string modelName2 = getModelNameFromPawn(pawn, MemMan);
+
+            int32_t stringIndex = memManager.ReadMem<int32_t>(pEntityIdentity + CEntityIdentity_m_nameStringableIndex);
+
+            Logger::warn("[CEntityIdentity] I: " + std::to_string(i));
             Logger::info(std::format("  - m_name (targetname): '{}'", name));
             Logger::info(std::format("  - m_designerName: '{}'", designerName));
+                        Logger::info("  - stringable_index: '{}'"+ std::to_string(stringIndex) );
+                        Logger::info("  - model_name_entity: '{}'"+ utils::sanitizeString(modelName2) );
+
         }
         else
         {
@@ -476,10 +505,10 @@ namespace
         Logger::info("======================================================================");
 
         // Stop the thread after the one-time dump.
-        while (true)
-        {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-        }
+      //  while (true)
+      //  {
+      //      std::this_thread::sleep_for(std::chrono::seconds(1));
+      //  }
     }
 
     bool hasFirstDecimalDigitNine(float number)
@@ -503,7 +532,7 @@ namespace
             return 0;
 
         // A proper implementation would also check the handle's serial number against the entity's.
-        return memManager.ReadMem<uintptr_t>(listEntry + (120 * (entryIndex & 0x1FF)));
+        return memManager.ReadMem<uintptr_t>(listEntry + (112 * (entryIndex & 0x1FF)));
     }
 
     void inspectEntity(uintptr_t pawn, const std::string &label, MemoryManagement &memManager)
@@ -565,41 +594,93 @@ namespace
 
     // In misc.cpp - Replace your old function with this one
 
-    std::string getModelNameFromPawn(uintptr_t pawn, MemoryManagement &memManager)
-    {
-        // This function implements the logic found in the server-side CBaseModelEntity::GetModelName()
 
-        // 1. C_BaseEntity -> m_CBodyComponent
-        uintptr_t pBodyComponent = memManager.ReadMem<uintptr_t>(pawn + clientDLL::C_BaseEntity_["m_CBodyComponent"]);
-        if (!pBodyComponent)
-            return "[No BodyComponent]";
 
-        // 2. CBodyComponent -> m_pSceneNode
-        // This is the pointer to what should be the CSkeletonInstance for a model entity.
-        uintptr_t pSceneNode = memManager.ReadMem<uintptr_t>(pBodyComponent + clientDLL::CBodyComponent_["m_pSceneNode"]);
-        if (!pSceneNode)
-            return "[No SceneNode]";
+    
 
-        // 3. CSkeletonInstance -> m_modelState (Embedded struct)
-        // The pSceneNode *is* the CSkeletonInstance.
-        uintptr_t pModelState = pSceneNode + clientDLL::CSkeletonInstance_["m_modelState"];
+uintptr_t findAndInspectChild(uintptr_t parentPawn, const std::string& childNameSubstring, MemoryManagement& memManager) {
+    
+    // --- Offsets from your client_dll.json (use your real values) ---
+    const uintptr_t C_BaseEntity_m_pGameSceneNode = clientDLL::C_BaseEntity_["m_pGameSceneNode"];
+    const uintptr_t CGameSceneNode_m_pChild = clientDLL::CGameSceneNode_["m_pChild"];
+    const uintptr_t CGameSceneNode_m_pNextSibling = clientDLL::CGameSceneNode_["m_pNextSibling"];
+    const uintptr_t CGameSceneNode_m_pOwner = clientDLL::CGameSceneNode_["m_pOwner"];
 
-        // 4. CModelState -> m_ModelName (Pointer to string)
-        uintptr_t pModelNameString = memManager.ReadMem<uintptr_t>(pModelState + clientDLL::CModelState_["m_ModelName"]);
-        if (!pModelNameString)
-            return "[No ModelName Ptr]";
-
-        // 5. Read the actual string
-        char modelNameBuffer[256]{};
-        memManager.ReadRawMem(pModelNameString, modelNameBuffer, sizeof(modelNameBuffer) - 1);
-
-        return std::string(modelNameBuffer);
+    // --- Get the parent's scene node ---
+    uintptr_t pParentSceneNode = memManager.ReadMem<uintptr_t>(parentPawn + C_BaseEntity_m_pGameSceneNode);
+    if (!pParentSceneNode) {
+        Logger::warn("Parent pawn has no scene node, cannot search for children.");
+         return 0;
     }
+    
+    // --- Start walking the linked list of children ---
+    uintptr_t pCurrentChildSceneNode = memManager.ReadMem<uintptr_t>(pParentSceneNode + CGameSceneNode_m_pChild);
+
+    
+    
+    if (!pCurrentChildSceneNode) {
+        Logger::info("Parent has no children.");
+         return 0;
+    }
+    
+    bool foundChild = false;
+    while (pCurrentChildSceneNode) {
+        // Get the child's pawn address from its scene node
+        uintptr_t pChildPawn = memManager.ReadMem<uintptr_t>(pCurrentChildSceneNode + CGameSceneNode_m_pOwner);
+        if (pChildPawn) {
+            // Get the child's name
+            //std::string childName = getEntityName(pChildPawn, memManager);
+
+                               // std::string childName = getModelNameFromPawn(pChildPawn, MemMan);
+                                
+                //   Logger::warn("co jest? "+utils::sanitizeString(childName));
+            
+          //  childName = utils::toLower(childName);
+           // Logger::warn("jakis tam child: "+childName);
+            // Check if this is the child we're looking for
+           // if (childName.find(childNameSubstring) != std::string::npos) {
+               // foundChild = true;
+               // Logger::warn(std::format("<<<<< FOUND MATCHING CHILD '{}' >>>>>", childName));
+                
+                // We found it! Perform a full inspection.
+               // inspectEntity(pChildPawn, "Hurtbox Child", memManager);
+                return pChildPawn;
+              Logger::warn("<<<<<<<<<<<<<<<<<< END CHILD INSPECTION >>>>>>>>>>>>>>>>>>");
+                break; // Stop searching once we've found it
+          //  }
+        }
+        
+        // Move to the next child in the list
+        pCurrentChildSceneNode = memManager.ReadMem<uintptr_t>(pCurrentChildSceneNode + CGameSceneNode_m_pNextSibling);
+    }
+    
+    if (!foundChild) {
+        //   pCurrentChildSceneNode = memManager.ReadMem<uintptr_t>(pParentSceneNode + CGameSceneNode_m_pChild);
+            Logger::warn("<<<<<<no hurt found >>>>>>>>>>>");
+
+          // return memManager.ReadMem<uintptr_t>(pCurrentChildSceneNode + CGameSceneNode_m_pOwner);
+
+         return 0;
+    }
+    return 0;
+}
+
+
+uintptr_t getPawnByHandle2(uint32_t handle, uintptr_t entityList, MemoryManagement& memManager) {
+    if (handle == 0xFFFFFFFF) return 0;
+    int entryIndex = handle & 0x7FFF;
+    uintptr_t listEntry = memManager.ReadMem<uintptr_t>(entityList + 0x8 * ((entryIndex & 0x7FFF) >> 9) + 0x10);
+    if (!listEntry) return 0;
+    return memManager.ReadMem<uintptr_t>(listEntry + 0x70 * (entryIndex & 0x1FF));
+}
+
+const uintptr_t C_BaseEntity_m_sUniqueHammerID = 1512;
+
     // Final combined code: Your proven Hunter logic + our new verified Dodger logic.
     void universalThreatDetectorWorker(MemoryManagement::moduleData client, LocalPlayer localPlayer)
     {
         // --- YOUR ORIGINAL CONFIGURATION ---
-        const auto OBSERVATION_PERIOD = std::chrono::milliseconds(5);
+        const auto OBSERVATION_PERIOD = std::chrono::milliseconds(17);
         const auto BLACKLIST_REFRESH_INTERVAL = std::chrono::seconds(10);
         const float MIN_MOVEMENT_DISTANCE_SQUARED = 2.0f * 2.0f;
         const float MIN_LASER_SPEED = 550.0f;
@@ -607,41 +688,45 @@ namespace
         // --- NEW FIXED MECHANICAL TIMINGS (Replaces JUMP_REACTION_TIME_SECONDS) ---
         const float PLAYER_JUMP_EXECUTION_TIME = 0.45f;
         const float PLAYER_CROUCH_EXECUTION_TIME = 0.25f;
-        const float CROUCHING_EYE_HEIGHT = 46.0f;
-        const float STANDING_FEET_HEIGHT = 45.99f;
         std::set<uintptr_t> alreadyInspected;
         // --- This variable is no longer needed but kept to not break your menu code ---
         float JUMP_REACTION_TIME_SECONDS = 0.0f;
 
         const Vector3 initialMyPos = localPlayer.getOrigin();
 
+    //      uintptr_t pGameEntitySystem = MemMan.ReadMem<uintptr_t>(client.base + offsets::clientDLL["dwGameEntitySystem"]);
+    // if (!pGameEntitySystem) {
+    //     Logger::error("Could not get CGameEntitySystem!");
+    //     return; // Cannot proceed
+    // }
+
         while (!g_stop_universal_threat_thread)
         {
-            std::this_thread::sleep_for(std::chrono::microseconds(777));
+            std::this_thread::sleep_for(std::chrono::microseconds(444));
             auto now = std::chrono::steady_clock::now();
 
-            if (now - g_blacklist_refresh_time > BLACKLIST_REFRESH_INTERVAL)
-            {
-                g_universal_tracker.clear();
-                g_blacklist_refresh_time = now;
-            }
+            // if (now - g_blacklist_refresh_time > BLACKLIST_REFRESH_INTERVAL)
+            // {
+            //     misc::g_universal_tracker.clear();
+            //     g_blacklist_refresh_time = now;
+            // }
 
             localPlayer.getPlayerPawn();
             if (localPlayer.playerPawn == 0)
                 continue;
 
             {
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                if (!g_cleanupQueue.empty())
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                if (!misc::g_cleanupQueue.empty())
                 {
-                    for (uintptr_t pawnToClean : g_cleanupQueue)
+                    for (uintptr_t pawnToClean : misc::g_cleanupQueue)
                     {
                         // Erase the cleaned object from the main tracker
-                        std::erase_if(g_universal_tracker, [&](const TrackedObject &obj)
+                        std::erase_if(misc::g_universal_tracker, [&](const misc::TrackedObject &obj)
                                       { return obj.pawn_address == pawnToClean; });
                         // Logger::info(std::format("[Main Thread] Cleaned up object {:#x}.", pawnToClean));
                     }
-                    g_cleanupQueue.clear();
+                    misc::g_cleanupQueue.clear();
                 }
             }
 
@@ -650,14 +735,23 @@ namespace
             // ==========================================================
             std::vector<uintptr_t> current_entities_in_game;
 
-            for (int i = 66; i < 64444; i++)
+
+
+
+        // Read the highest entity index currently in use. This is a crucial optimization.
+       // int highestEntityIndex = MemMan.ReadMem<int>(pGameEntitySystem + offsets::clientDLL["dwGameEntitySystem_highestEntityIndex"]);
+
+                           //Logger::warn("indexes how many:  "+std::to_string(highestEntityIndex));
+
+
+            for (int i = 64; i <= 66666; i++)
             {
                 C_CSPlayerPawn C_CSPlayerPawn(client.base);
                 C_CSPlayerPawn.value = i;
-                if (!C_CSPlayerPawn.getListEntry() || !C_CSPlayerPawn.getPlayerPawn())
-                    continue;
+                 if (!C_CSPlayerPawn.getListEntry() || !C_CSPlayerPawn.getPlayerPawn()){
+                     continue;
+                 }
 
-                // if (C_CSPlayerPawn.getOwner() != -1) continue;
 
                 uintptr_t current_pawn = C_CSPlayerPawn.playerPawn;
 
@@ -665,48 +759,55 @@ namespace
                 // if(classname.empty()){
                 //     continue;
                 // }
-                // Logger::warn(classname + ", index: "+ std::to_string(i));
-                // continue;
+                // // Logger::warn(classname + ", index: "+ std::to_string(i));
+                // // continue;
+
+                 //std::string modelName3 = getModelName(current_pawn, MemMan);
+                    //std::string modelName2 = getModelNameFromPawn(current_pawn, MemMan);
+                  // Logger::warn("co jest, ID: "+std::to_string(i)+",name: "+utils::sanitizeString(modelName2));
                 current_entities_in_game.push_back(current_pawn);
-                auto it = std::find_if(g_universal_tracker.begin(), g_universal_tracker.end(),
-                                       [current_pawn](const TrackedObject &obj)
+                auto it = std::find_if(misc::g_universal_tracker.begin(), misc::g_universal_tracker.end(),
+                                       [current_pawn](const misc::TrackedObject &obj)
                                        { return obj.pawn_address == current_pawn; });
 
                 CGameSceneNode sceneNode;
                 sceneNode.value = C_CSPlayerPawn.getCGameSceneNode();
                 Vector3 current_pos = sceneNode.getOrigin();
 
-                if (it == g_universal_tracker.end())
+                if (it == misc::g_universal_tracker.end())
                 {
-                    g_universal_tracker.push_back({current_pawn, current_pos, now, ObjectState::Observing});
+                    misc::g_universal_tracker.push_back({current_pawn, current_pos, now, misc::ObjectState::Observing});
+
                 }
                 else
                 {
                     // --- STATE MACHINE LOGIC ---
                     switch (it->state)
                     {
-                    case ObjectState::Observing:
+                    case misc::ObjectState::Observing:
                         if (now - it->first_seen_time > OBSERVATION_PERIOD)
                         {
-                            it->state = ObjectState::Monitoring; // Observation over, start monitoring
+                            it->state = misc::ObjectState::Monitoring; // Observation over, start monitoring
                         }
                         break;
 
-                    case ObjectState::Monitoring:
+                    case misc::ObjectState::Monitoring:
                     {
                         // Check if the object has moved significantly since we first saw it
                         float dist_moved_sq = (current_pos - it->last_position).LengthSqr();
                         if (dist_moved_sq > MIN_MOVEMENT_DISTANCE_SQUARED)
                         {
                             // Logger::info(std::format("[ThreatDetector] Object {:#x} is now moving. Promoting to Threat.", it->pawn_address));
-                            it->state = ObjectState::Threat; // It's moving! It's a potential threat.
+                            it->state = misc::ObjectState::Threat; // It's moving! It's a potential threat.
+                             //inspectEntity(current_pawn, MemMan, i);
+
                         }
                         break;
                     }
 
                     // If it's a threat, static, or dodged, we don't change its state here.
-                    case ObjectState::Threat:
-                    case ObjectState::Dodged:
+                    case misc::ObjectState::Threat:
+                    case misc::ObjectState::Dodged:
                         break;
                     }
                     it->last_position = current_pos; // Always update last known position
@@ -716,32 +817,31 @@ namespace
             // Cleanup logic remains the same
             // Logger::warn(std::format("[Discovery] Frame finished. Found a total of {} entities.", current_entities_in_game.size()));
 
-            g_universal_tracker.erase(
-                std::remove_if(g_universal_tracker.begin(), g_universal_tracker.end(),
-                               [&](const TrackedObject &obj)
+            misc::g_universal_tracker.erase(
+                std::remove_if(misc::g_universal_tracker.begin(), misc::g_universal_tracker.end(),
+                               [&](const misc::TrackedObject &obj)
                                {
                                    return std::find(current_entities_in_game.begin(), current_entities_in_game.end(), obj.pawn_address) == current_entities_in_game.end();
                                }),
-                g_universal_tracker.end());
+                misc::g_universal_tracker.end());
             // =======================================================
             //  YOUR PROVEN THREAT PRIORITIZATION LOGIC (UNCHANGED)
             // ==========================================================
 
-            TrackedObject *primary_threat_ptr = nullptr;
+            misc::TrackedObject *primary_threat_ptr = nullptr;
 
             std::string threttingName = "";
 
-            for (auto &obj : g_universal_tracker)
+            for (auto &obj : misc::g_universal_tracker)
             {
-
 
 
                 float lowest_tti = 10.0f;
 
                 // We only care about objects that are confirmed threats
-                if (obj.state == ObjectState::Handled)
+                if (obj.state == misc::ObjectState::Handled)
                     continue;
-                if (obj.state != ObjectState::Threat)
+                if (obj.state != misc::ObjectState::Threat)
                     continue;
                 // uintptr_t gameSceneNode = MemMan.ReadMem<uintptr_t>(localPlayer.playerPawn + clientDLL::C_BaseEntity_["m_pGameSceneNode"]);
 
@@ -752,7 +852,7 @@ namespace
 
                     if (utils::toLower(modelName).find("/entities/") != std::string::npos)
                     {
-
+                        
                     // std::string dsa = getModelNameFromPawn(obj.pawn_address, MemMan);
 
                     
@@ -772,6 +872,7 @@ namespace
                     else{
                         continue;
                     }
+                threttingName = utils::sanitizeString(modelName);
                 Vector3 threatVel = MemMan.ReadMem<Vector3>(obj.pawn_address + clientDLL::C_BaseEntity_["m_vecVelocity"]);
 
                 Vector3 myPosNow = localPlayer.getOrigin();
@@ -836,7 +937,7 @@ namespace
                         //     continue;
                         // }
 
-                        if (speed < 999.0f)
+                        if (speed < 899.0f)
                         {
                             continue;
                         }
@@ -845,6 +946,7 @@ namespace
                         // Check if it's moving away from us
                         if (threatVel.Dot(obj.last_position - myPosNow) >= -0.01f)
                         {
+                            Logger::warn("moving away, ending the threat named: "+ threttingName);
                             continue;
                         }
 
@@ -909,175 +1011,57 @@ namespace
                         continue;
                     }
 
-                    // Check if it will miss
-                    // if (misc::DistanceToRaySquared(myPosNow, obj.last_position, threatDir) > PLAYER_HITBOX_RADIUS_SQUARED) continue;
-                    //    if(speed == 0.0f){
-                    //       uintptr_t entity = MemMan.ReadMem<uintptr_t>(obj.pawn_address + 0x10);
-                    // 	uintptr_t designerNameAddy2 = MemMan.ReadMem<uintptr_t>(entity + 0x18);
-                    // 	char designerNameBuffer2[MAX_PATH]{};
-                    // 	MemMan.ReadRawMem(designerNameAddy2, designerNameBuffer2, MAX_PATH);
-
-                    // 	std::string name2 = std::string(designerNameBuffer2);
-                    // 	std::string lowerCaseName2 = utils::toLower(name2);
-
-                    //         std::string text = utils::sanitizeString(lowerCaseName2);
-
-                    //     if (text.length() < 4) {
-                    //      primary_threat_ptr = nullptr;
-                    //         continue;
-                    //     }
-                    //     if (text.length() > 50) {
-                    //      primary_threat_ptr = nullptr;
-                    //         continue;
-                    //     }
-                    //      bool isOnlyWhitespace = std::all_of(text.begin(), text.end(), [](char c) {
-                    //         return std::isspace(static_cast<unsigned char>(c));
-                    //     });
-                    //     if (text.empty() || isOnlyWhitespace) {
-                    //         primary_threat_ptr = nullptr;
-                    //         continue;
-                    //     }
-
-                    //     if(text.find("end_dodge_hurt") != std::string::npos) {
-                    //       std::thread(handleTeleportingLaser, obj.pawn_address, localPlayer.getOrigin(), localPlayer, speedin).detach();
-                    //       continue;
-                    //     }
-                    //     if(text.find("particle_system_end_sphere_relay") != std::string::npos) {
-                    //       std::thread(handleTeleportingLaser, obj.pawn_address, localPlayer.getOrigin(), localPlayer, speedin).detach();
-                    //       continue;
-                    //     }
-                    //     //                 if(text.find("dodge_door_") != std::string::npos) {
-                    //     //   std::thread(handleTeleportingLaser, obj.pawn_address, localPlayer.getOrigin(), localPlayer, speedin).detach();
-                    //     //   continue;
-                    //     // }
-                    //                                     if(text.find("dodge_relay_") != std::string::npos) {
-                    //       std::thread(handleTeleportingLaser, obj.pawn_address, localPlayer.getOrigin(), localPlayer, speedin).detach();
-                    //       continue;
-                    //     }
-
-                    //                                                     if(text.find("end_dodge_particle_") != std::string::npos) {
-                    //       std::thread(handleTeleportingLaser, obj.pawn_address, localPlayer.getOrigin(), localPlayer, speedin).detach();
-                    //       continue;
-                    //     }
-                    //     //                                                                 if(text.find("end_door_sphere_particle_") != std::string::npos) {
-                    //     //   std::thread(handleTeleportingLaser, obj.pawn_address, localPlayer.getOrigin(), localPlayer, speedin).detach();
-                    //     //   continue;
-                    //     // }
-
-                    //    // Logger::error(text);
-                    // }
-
-                    //                 if(text.find("activateui") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    // if(text.find("stage2_zm_item_location0") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-
-                    //                 if(text == "player"){
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                  if(text.find("default_sky") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                 if(text.find("gogo_part") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                   if(text.find("gogo_part") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                  if(text.find("knife_heal_branch") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                  if(text.find("knife_heal_particle_") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                  if(text.find("knife_heal_ui") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                  if(text.find("taff_heal_epicker_kil") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                  if(text.find("_god_thing_breaka") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                  if(text.find("none") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                                  if(text.find("td_deserttom") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                                  if(text.find("oss_attack_pilla") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
-                    //                                                                  if(text.find("boss_electro") != std::string::npos) {
-                    //                     primary_threat_ptr = nullptr;
-                    //                     continue;
-                    //                 }
                 }
                 else
                 {
-                    primary_threat_ptr = &obj;
-                    if (primary_threat_ptr != nullptr)
-                    {
-                        uintptr_t threatPawn = primary_threat_ptr->pawn_address;
+                    // primary_threat_ptr = &obj;
+                    // if (primary_threat_ptr != nullptr)
+                    // {
+                    //    uintptr_t threatPawn = primary_threat_ptr->pawn_address;
 
-                        std::string modelName = getModelNameFromPawn(threatPawn, MemMan);
+                    //    std::string modelName = getModelNameFromPawn(threatPawn, MemMan);
 
-                        if (utils::toLower(modelName).find("laser") != std::string::npos)
-                        {
-                            if (utils::toLower(modelName).find("laser_wall_button_") != std::string::npos)
-                            {
-                                primary_threat_ptr = nullptr;
-                                continue;
-                            }
-                            if (utils::toLower(modelName).find("laserwall_cubes_") != std::string::npos)
-                            {
-                                primary_threat_ptr = nullptr;
-                                continue;
-                            }
-                            Logger::error(modelName);
-                            primary_threat_ptr->state = ObjectState::Handled;
-                            std::thread(handleTeleportingLaser, threatPawn, initialMyPos, localPlayer).detach();
-                        }
-                        else if (utils::toLower(modelName).find("lazer") != std::string::npos)
-                        {
-                            if (utils::toLower(modelName).find("gabranth_lazer_") != std::string::npos){
-                            primary_threat_ptr = nullptr;
-                            continue;
-                            }
-                            Logger::error(modelName);
-                            primary_threat_ptr->state = ObjectState::Handled;
-                            std::thread(handleTeleportingLaser, threatPawn, initialMyPos, localPlayer).detach();
-                        }
-                        else if (utils::toLower(modelName).find("s4_final_boss_return_doorlaser1_") != std::string::npos)
-                        {
-                            Logger::error(modelName);
-                            primary_threat_ptr->state = ObjectState::Handled;
-                            std::thread(handleTeleportingLaser, threatPawn, initialMyPos, localPlayer).detach();
-                        }
-                        else{
+                    //    if (utils::toLower(modelName).find("laser") != std::string::npos)
+                    //    {
+                    //        if (utils::toLower(modelName).find("laser_wall_button_") != std::string::npos)
+                    //        {
+                    //            primary_threat_ptr = nullptr;
+                    //            continue;
+                    //        }
+                    //        if (utils::toLower(modelName).find("laserwall_cubes_") != std::string::npos)
+                    //        {
+                    //            primary_threat_ptr = nullptr;
+                    //            continue;
+                    //        }
+                    //        Logger::error(modelName);
+                    //        primary_threat_ptr->state = misc::ObjectState::Handled;
+                    //        std::thread(handleTeleportingLaser, threatPawn, initialMyPos, localPlayer).detach();
+                    //    }
+                    //    else if (utils::toLower(modelName).find("lazer") != std::string::npos)
+                    //    {
+                    //     Logger::error("contains lazer word: "+ modelName);
+                    //     //    if (utils::toLower(modelName).find("gabranth_lazer_") != std::string::npos){
+                    //     //    primary_threat_ptr = nullptr;
+                    //     //    continue;
+                    //     //    }
 
-                            primary_threat_ptr = nullptr;
-                            continue;
-                        }
+                    //        primary_threat_ptr->state = misc::ObjectState::Handled;
+                    //        std::thread(handleTeleportingLaser, threatPawn, initialMyPos, localPlayer).detach();
+                    //    }
+                    //    else if (utils::toLower(modelName).find("s4_final_boss_return_doorlaser") != std::string::npos)
+                    //    {
+                    //        Logger::error(modelName);
+                    //        primary_threat_ptr->state = misc::ObjectState::Handled;
+                    //        std::thread(handleTeleportingLaser, threatPawn, initialMyPos, localPlayer).detach();
+                    //    }
+                    //    else{
+
+                    //        primary_threat_ptr = nullptr;
+                    //        continue;
+                    //    }
 
 
-                    }
+                    // }
                       continue;
                 }
                 // ==========================================================
@@ -1115,7 +1099,7 @@ namespace
 
 
 
-                    primary_threat_ptr->state = ObjectState::Handled;
+                    primary_threat_ptr->state = misc::ObjectState::Handled;
 
                     std::thread(handleSingleThreat, threatPawn, initialMyPos, localPlayer, speed2, threttingName).detach();
                     Logger::info("running laser handler... for... " + modelName);                }
@@ -1193,7 +1177,12 @@ namespace
     void handleTeleportingLaser(uintptr_t threatPawn, Vector3 myInitialPos, LocalPlayer localPlayer)
     {
 
-        float PLAYER_JUMP_EXECUTION_TIME = 0.38f + miscConf.latencyLasers + 0.02f;
+        const bool UchichaLvl2 = false;
+
+         const bool UchichaLvl4 = false;
+
+        float PLAYER_JUMP_EXECUTION_TIME = 0.38f + miscConf.latencyLasers + 0.03f;
+
         const float PLAYER_CROUCH_EXECUTION_TIME = 1.35f;
         const float CROUCHING_EYE_HEIGHT = 54.0f;
         const float STANDING_FEET_HEIGHT = 53.99999;
@@ -1211,19 +1200,69 @@ namespace
 
         const float reference_z = myInitialPos.z;
 
+                bool isLeftTilt = false;
+                bool isRightTilt = false;
+
+            uintptr_t pGameSceneNode2 = MemMan.ReadMem<uintptr_t>(threatPawn + clientDLL::C_BaseEntity_["m_pGameSceneNode"]);
+            if (!pGameSceneNode2){
+                Logger::error(" No pGameSceneNode");
+
+                return;
+            }
+            const uintptr_t CGameSceneNode_m_angAbsRotation = clientDLL::CGameSceneNode_["m_angAbsRotation"];
+
+            Vector3 angRotation = MemMan.ReadMem<Vector3>(pGameSceneNode2 + clientDLL::CGameSceneNode_["m_angRotation"]);
+
+            //Vector3 liveRotation = MemMan.ReadMem<Vector3>(pGameSceneNode2 + CGameSceneNode_m_angAbsRotation);
+            Logger::error("rotZ: " + std::to_string(angRotation.z));
+            Logger::error("rotX: " + std::to_string(angRotation.x));
+            //memManager.ReadMem<Vector3>(pGameSceneNode + clientDLL::CGameSceneNode_["m_angAbsRotation"])
+
+
+
+            int first = 2.5;
+            int second = -2.5;
+
+
+            if(UchichaLvl4){
+            if(angRotation.x > first){
+                isLeftTilt = true;
+            }
+            else if( angRotation.x < second){
+                isRightTilt = true;
+            }
+            }
+            else{
+            if(angRotation.z > first){
+                isLeftTilt = true;
+            }
+            else if( angRotation.z < second){
+                isRightTilt = true;
+            }
+            }
+
+
+        bool isTiltedLaser = isLeftTilt || isRightTilt;
+
+            std::string modelName_u = getModelNameFromPawn(threatPawn, MemMan);
+
+
+            
+
+
 
         Logger::warn("starting tp laser dodge.");
         while (true)
         {
 
             auto now = std::chrono::steady_clock::now();
-            std::this_thread::sleep_for(std::chrono::milliseconds(3));
+            std::this_thread::sleep_for(std::chrono::milliseconds(4));
 
             if (std::chrono::steady_clock::now() - threadStartTime > threadTimeout)
             {
                 Logger::error(std::format("Handler for {:#x} timed out.", threatPawn));
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                g_cleanupQueue.push_back(threatPawn);
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                misc::g_cleanupQueue.push_back(threatPawn);
                 return;
             }
 
@@ -1233,10 +1272,13 @@ namespace
 
                 return;
             }
-                // Threat is gone
-            // ... Timeout and Get Live Data logic ...
             Vector3 myPos = localPlayer.getOrigin();
             Vector3 threatOrigin = MemMan.ReadMem<Vector3>(pGameSceneNode + clientDLL::CGameSceneNode_["m_vecAbsOrigin"]);
+            Vector3 effectiveVel;
+            float threatSpeed;
+            if(!UchichaLvl2 && !UchichaLvl4){
+
+
 
             // --- Initialize on first run ---
             if (!is_initialized)
@@ -1254,7 +1296,7 @@ namespace
             }
 
             // --- Determine Velocity ---
-            Vector3 effectiveVel;
+
             // This is a stationary/teleporting laser. Calculate its velocity.
             effectiveVel = (threatOrigin - last_pos) / time_delta.count();
 
@@ -1262,7 +1304,7 @@ namespace
             last_pos = threatOrigin;
             last_time = now;
 
-            float threatSpeed = effectiveVel.Length();
+            threatSpeed = effectiveVel.Length();
 
             if (threatSpeed < 700.0f)
             {
@@ -1273,16 +1315,44 @@ namespace
                 continue;
             }
             speed_samples.push_back(threatSpeed);
-
-            float sum = std::accumulate(speed_samples.begin(), speed_samples.end(), 0.0f);
-            if (!speed_samples.empty()) {
-                averaged_speed = sum / speed_samples.size();
+            if(speed_samples.size()<3){
+                continue;
             }
+            float sum = std::accumulate(speed_samples.begin(), speed_samples.end(), 0.0f);
+            averaged_speed = sum / speed_samples.size();
+
 
             threatSpeed = averaged_speed; //hard coded for now, we need to make it average
 
-            Vector3 threatDirection = effectiveVel.Normalize();
-           // Logger::warn("effective speed: " + std::to_string(threatSpeed));
+                        }
+                        else{
+                            if(UchichaLvl2){
+                                threatSpeed  = 1250.0f;
+                            }
+                            else if(UchichaLvl4){
+                                threatSpeed  = 1500.0f;
+                            }
+                        }
+
+            Vector3 threatDirection;
+            if(UchichaLvl2){
+                threatDirection = Vector3{1500.0f, 0.0f, 0.0f}.Normalize(); 
+            }
+            else if(UchichaLvl4){
+
+            if (modelName_u.find("inhugd_susano_laser_door2_17.vm") != std::string::npos) {
+                threatDirection = Vector3{ 0.0f, 1.0f, 0.0f };
+             }
+             else{
+                threatDirection = Vector3{ 0.0f, -1.0f, 0.0f };
+
+             }
+                
+            }
+            else{
+                threatDirection = effectiveVel.Normalize();
+            }
+            //Logger::warn("threatDirection: " + std::to_string(threatDirection.x) +", " + std::to_string(threatDirection.y) +", "+std::to_string(threatDirection.z));
             // --- Use our verified TTI calculation with the determined velocity ---
             Vector3 vecToPlayer = myPos - threatOrigin;
             float forwardDistance = vecToPlayer.Dot(threatDirection);
@@ -1291,7 +1361,7 @@ namespace
 
             float true_tti = forwardDistance / threatSpeed;
 
-             Logger::info("przeszlo: "+ std::to_string(true_tti));
+            // Logger::info("przeszlo: "+ std::to_string(true_tti));
 
             uintptr_t pCollision = MemMan.ReadMem<uintptr_t>(threatPawn + clientDLL::C_BaseEntity_["m_pCollision"]);
             if (!pCollision)
@@ -1330,6 +1400,96 @@ namespace
             Vector3 vecToPlayerFromEdge = myPos - leadingEdgePoint;
             float predictedLaserHeight = leadingEdgePoint.z - reference_z;
 
+            if(!UchichaLvl2){
+               if (isTiltedLaser)
+                     {   // IS TILTED?
+              
+                bool isMovingMostlyOnY = std::abs(threatDirection.y) > std::abs(threatDirection.x);
+
+                // 2. Get the full bounds of the AABB in world coordinates
+                float laser_min_x = threatOrigin.x + threatMins.x;
+                float laser_max_x = threatOrigin.x + threatMaxs.x;
+                float laser_min_y = threatOrigin.y + threatMins.y;
+                float laser_max_y = threatOrigin.y + threatMaxs.y;
+                float laser_bottom_z = threatOrigin.z + threatMins.z;
+                float laser_top_z = threatOrigin.z + threatMaxs.z;
+
+                // 3. Calculate my percentage position along the laser's width
+                float my_relevant_coord = isMovingMostlyOnY ? myPos.x : myPos.y;
+                float laser_min_relevant_coord = isMovingMostlyOnY ? laser_min_x : laser_min_y;
+                float laser_max_relevant_coord = isMovingMostlyOnY ? laser_max_x : laser_max_y;
+
+                float width = laser_max_relevant_coord - laser_min_relevant_coord;
+                float my_pos_along_width = my_relevant_coord - laser_min_relevant_coord;
+
+                float percentage = 0.5f;
+                if (width > 1.0f)
+                {
+                    percentage = my_pos_along_width / width;
+                    percentage = (std::max)(0.0f, std::min(1.0f, percentage));
+                }
+
+                if (isRightTilt)
+                {
+                    percentage = 1.0f - percentage;
+                    //predictedLaserHeight = 20.0f;
+                     //  Logger::info("TILTRED RIGHT");
+                }
+
+
+
+
+                 float interpolated_height = laser_bottom_z + ((laser_top_z - laser_bottom_z) * percentage);
+                 float laser_thickness = 4.0f; // Guess the thickness of the individual hurtboxes
+
+                 float predicted_laser_bottom_at_my_pos = interpolated_height - (laser_thickness / 2.0f);
+
+                 predictedLaserHeight = predicted_laser_bottom_at_my_pos - reference_z;
+                
+            }
+            else
+            {
+                predictedLaserHeight = leadingEdgePoint.z - reference_z;
+                // predictedLaserHeight = threatOrigin.z - myPos.z;
+            }
+                        }
+            else{
+
+             if (isRightTilt)
+                {
+                    //percentage = 1.0f - percentage;
+                    predictedLaserHeight = 20.0f;
+                     //  Logger::info("TILTRED RIGHT");
+                }
+                else if (isLeftTilt){
+                    predictedLaserHeight = 60.0f;
+
+                        // Logger::info("TILTRED LEFT");
+                }
+            }
+
+            if(UchichaLvl4){
+              if (modelName_u.find("crouch") != std::string::npos) {
+                    predictedLaserHeight = 60.0f;
+             }
+             else{
+            
+             if (isRightTilt)
+                {
+                    //percentage = 1.0f - percentage;
+                    predictedLaserHeight = 20.0f;
+                     //  Logger::info("TILTRED RIGHT");
+                }
+                else if (isLeftTilt){
+                    predictedLaserHeight = 60.0f;
+
+                        // Logger::info("TILTRED LEFT");
+                }
+        }
+            }
+
+
+
             bool action_taken = false;
 
             int flagss = localPlayer.getFlags();
@@ -1339,31 +1499,55 @@ namespace
             {
                 Logger::info("za nisko na groundsach: " + std::to_string(onGrounds));
                 action_taken = true;
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                g_cleanupQueue.push_back(threatPawn);
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                misc::g_cleanupQueue.push_back(threatPawn);
                 return;
             }
-            if (predictedLaserHeight > 100.0f && onGrounds)
+            if (predictedLaserHeight > 111.0f && onGrounds)
             {
                 Logger::info("za wysoko: " + std::to_string(onGrounds));
                 action_taken = true;
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                g_cleanupQueue.push_back(threatPawn);
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                misc::g_cleanupQueue.push_back(threatPawn);
                 return;
             }
-            if (predictedLaserHeight < 54.0f && predictedLaserHeight > 0.0f)
+
+
+            if (predictedLaserHeight < 54.0f && predictedLaserHeight >= 0.0f)
             {
                 if (true_tti <= PLAYER_JUMP_EXECUTION_TIME)
                 {
+                                 if (isRightTilt)
+                {
+                       Logger::info("TILTRED RIGHT");
+                }
+                else if(isLeftTilt){
+
+                         Logger::info("TILTRED LEFT");
+                }
+                    Logger::info("TELEPROTING LASER HEIGHT: " + std::to_string(predictedLaserHeight) + "tti: " + std::to_string(true_tti));
+
+                    
+                     int flagss2 = localPlayer.getFlags();
+                     bool onGrounds2 = (flagss & FL_ONGROUNDA);
+
+                     while(!onGrounds2){
+                        flagss2 = localPlayer.getFlags();
+                        onGrounds2 = (flagss & FL_ONGROUNDA);
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1)); 
+                     }
+
                     Logger::info(std::format("HANDLER: JUMP on {:#x} (TTI={:.2f})", threatPawn, true_tti));
                     mouse_event(MOUSEEVENTF_WHEEL, 0, 0, 120, 0);
-                    // if (predictedLaserHeight > 41.0f)
-                    // {
-                    //     std::this_thread::sleep_for(std::chrono::milliseconds(3));
-                    //     keybd_event(VK_CONTROL, 0, 0, 0);
-                    //     std::this_thread::sleep_for(std::chrono::milliseconds(450));
-                    //     keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-                    // }
+                    if (predictedLaserHeight > 45.0f)
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(3));
+                        Logger::info("JumpCrouch once.");
+                         mouse_event(MOUSEEVENTF_WHEEL, 0, 0, 120, 0);
+                         std::this_thread::sleep_for(std::chrono::milliseconds(17));
+                         keybd_event(VK_CONTROL, 0, 0, 0);
+                         std::this_thread::sleep_for(std::chrono::milliseconds(550));
+                    }
 
                     Vector3 last_pos_inner = MemMan.ReadMem<Vector3>(MemMan.ReadMem<uintptr_t>(threatPawn + clientDLL::C_BaseEntity_["m_pGameSceneNode"]) + clientDLL::CGameSceneNode_["m_vecAbsOrigin"]);
                     auto last_time_inner = std::chrono::steady_clock::now();
@@ -1422,6 +1606,16 @@ namespace
             {
                 if (true_tti <= PLAYER_CROUCH_EXECUTION_TIME)
                 {
+                                 if (isRightTilt)
+                {
+                       Logger::info("TILTRED RIGHT");
+                }
+                else if(isLeftTilt){
+
+                         Logger::info("TILTRED LEFT");
+                }
+                            Logger::info("TELEPROTING LASER HEIGHT: " + std::to_string(predictedLaserHeight) + "tti: " + std::to_string(true_tti));
+
                     Logger::info(std::format("HANDLER [Teleport]: CROUCH on {:#x} (TTI={:.2f})", threatPawn, true_tti));
 
                     // --- CORRECTED DYNAMIC CROUCH LOGIC for Teleporting Lasers ---
@@ -1489,8 +1683,9 @@ namespace
             if (action_taken)
             {
                 {
-                    std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                    g_cleanupQueue.push_back(threatPawn);
+                    std::this_thread::sleep_for(std::chrono::seconds(5));
+                    std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                    misc::g_cleanupQueue.push_back(threatPawn);
                     return;
                 }
             }
@@ -2008,10 +2203,10 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
 
             Vector3 liveRotation = MemMan.ReadMem<Vector3>(pGameSceneNode + CGameSceneNode_m_angAbsRotation);
 
-            if(liveRotation.z > 5){
+            if(liveRotation.z > 2){
                 isLeftTilt = true;
             }
-            else if( liveRotation.z < -5){
+            else if( liveRotation.z < -2){
                 isRightTilt = true;
             }
 
@@ -2047,8 +2242,8 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             if (std::chrono::steady_clock::now() - threadStartTime > threadTimeout)
             {
                 Logger::error(std::format("Handler for {:#x} timed out.", threatPawn));
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                g_cleanupQueue.push_back(threatPawn);
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                misc::g_cleanupQueue.push_back(threatPawn);
                 return;
             }
 
@@ -2071,8 +2266,8 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             {
                 // Logger::info("height bel ");
                  Logger::info(std::format("ABC"));
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                g_cleanupQueue.push_back(threatPawn);
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                misc::g_cleanupQueue.push_back(threatPawn);
                 return;
             }
             uintptr_t pGameSceneNode = MemMan.ReadMem<uintptr_t>(threatPawn + clientDLL::C_BaseEntity_["m_pGameSceneNode"]);
@@ -2129,8 +2324,8 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             if (forwardDistance < 0)
             {
                 Logger::info("Leading edge has passed");
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                g_cleanupQueue.push_back(threatPawn);
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                misc::g_cleanupQueue.push_back(threatPawn);
                 return; // Leading edge has passed
             }
 
@@ -2207,16 +2402,16 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             {
                 Logger::info("za nisko na groundsach: " + std::to_string(onGrounds));
                 action_taken = true;
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                g_cleanupQueue.push_back(threatPawn);
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                misc::g_cleanupQueue.push_back(threatPawn);
                 return;
             }
             if (predictedLaserHeight > 105.0f && onGrounds)
             {
                 Logger::info("za wysoko: ");
                 action_taken = true;
-                std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                g_cleanupQueue.push_back(threatPawn);
+                std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                misc::g_cleanupQueue.push_back(threatPawn);
                 return;
             }
 
@@ -2229,7 +2424,7 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             {
                 myAction = PredictedAction::Crouch;
             }
-            Logger::info(" Height: " + std::to_string(predictedLaserHeight) + "tti: " + std::to_string(true_tti));
+           // Logger::info(" Height: " + std::to_string(predictedLaserHeight) + "tti: " + std::to_string(true_tti));
 
 
             // 3. Continuously update my status on the whiteboard.
@@ -2264,6 +2459,9 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             {
                 while (!onGrounds)
                 {
+                    flagss = localPlayer.getFlags();
+                    onGrounds = (flagss & FL_ONGROUNDA);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1)); 
                 }
                 if (myAction == PredictedAction::Jump)
                 {
@@ -2276,7 +2474,7 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
                     mouse_event(MOUSEEVENTF_WHEEL, 0, 0, 120, 0);
                     std::this_thread::sleep_for(std::chrono::milliseconds(17));
                     keybd_event(VK_CONTROL, 0, 0, 0);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(550));
+                   // std::this_thread::sleep_for(std::chrono::milliseconds(550));
                 }
                 else if (myAction == PredictedAction::Crouch)
                 {
@@ -2319,7 +2517,7 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
                             break; // Exit the loop to stand up
                         }
 
-                        std::this_thread::sleep_for(std::chrono::microseconds(111));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     }
                 }
 
@@ -2350,13 +2548,13 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
 
                         // Logger::warn(std::to_string(projection));
 
-                        if (projection < -1.0f)
+                        if (projection < -0.2f)
                         { // Use a small negative buffer to be safe
                             Logger::info(std::format("[ThreatDetector] Threat has passed (projection: {:.2f}).", projection));
                             break; // Exit the loop to stand up
                         }
 
-                        std::this_thread::sleep_for(std::chrono::microseconds(1));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     }
 
                     // NOW, BEFORE RELEASING, PEEK AT THE NEXT THREAT
@@ -2475,8 +2673,8 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             if (shouldExecute)
             {
                 {
-                    std::lock_guard<std::mutex> lock(g_cleanupMutex);
-                    g_cleanupQueue.push_back(threatPawn);
+                    std::lock_guard<std::mutex> lock(misc::g_cleanupMutex);
+                    misc::g_cleanupQueue.push_back(threatPawn);
                     return;
                 }
             }
@@ -2771,7 +2969,7 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             g_stop_universal_threat_thread = true;
             g_isHighLaserThreat = false; // Ensure flag is reset
             g_universal_threat_thread.join();
-            g_universal_tracker.clear();
+           // misc::g_universal_tracker.clear();
         }
     }
 
@@ -2793,8 +2991,8 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
         // const char *chatPattern = "\x48\x83\xEC\x20\x48\x8B\x3D\x00\x00\x00\x00\x4C\x8B\xC9\x48\x85\xFF";
         // const char *chatMask = "xxxxxxx????xxxxxx";
 
-        const char *chatPattern = "\x40\x53\x48\x83\xEC\x20\x48\x8B\xD9\xE8\x00\x00\x00\x00\x48\x8B\x0D\x00\x00\x00\x00\xE8\x00\x00\x00\x00\x48\x8D\x8B\x00\x00\x00\x00\x48\x8B\x01\x48\x83\xC4\x20\x5B\x48\xFF\x60\x10";
-        const char *chatMask = "xxxxxxxxxx????xxx????x????xxx????xxxxxxxxxxxx";
+        const char *chatPattern = "\x80\x38\x00\x0F\x85\x00\x00\x00\x00\x48\x8B\x0D\x00\x00\x00\x00\x48\x8D\x15\x00\x00\x00\x00\xE8\x00\x00\x00\x00";
+        const char *chatMask = "xxxxx????xxx????xxx????x????";
 
         uintptr_t patternAddr = PatternScan(client.base, client.size, chatPattern, chatMask);
 
@@ -2813,15 +3011,26 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
 
         //for:
 
-//         .text:0000000180AA3BD0                 push    rbx
+// .text:0000000180AA3BD0                 push    rbx
 // .text:0000000180AA3BD2                 sub     rsp, 20h
 // .text:0000000180AA3BD6                 mov     rbx, rcx
 // .text:0000000180AA3BD9                 call    sub_180A94090
 // .text:0000000180AA3BDE                 mov     rcx, cs:qword_181D810E8
-        const int32_t ripOffset = MemMan.ReadMem<int32_t>(patternAddr + 17);
-        const uintptr_t pStaticBase = patternAddr + 21 + ripOffset;
+      //  const int32_t ripOffset = MemMan.ReadMem<int32_t>(patternAddr + 17);
+      //  const uintptr_t pStaticBase = patternAddr + 21 + ripOffset;
 
-        const std::vector<uintptr_t> offsets = {0x238, 0x138, 0x100, 0x0};
+
+
+
+
+
+//.text:00000001805A21C4                 cmp     byte ptr [rax], 0
+//.text:00000001805A21C7                 jnz     loc_1805A2255
+//.text:00000001805A21CD                 mov     rcx, cs:qword_181E8D900
+        const int32_t ripOffset = MemMan.ReadMem<int32_t>(patternAddr + 12);
+        const uintptr_t pStaticBase = patternAddr + 16 + ripOffset;
+
+        const std::vector<uintptr_t> offsets = {0x250, 0x178, 0x118, 0x00};
 
 
         Logger::info(std::format("[ChatTrigger] Resolved static base pointer to: {:#x}", pStaticBase));
@@ -2867,6 +3076,7 @@ void handleAngleInspection(uintptr_t threatPawn, LocalPlayer localPlayer, Memory
             lastReadMessage = currentMessage; // Update to prevent re-processing
 
             // --- Key change: We only care about [CONSOLE] messages ---
+            //Logger::info("asdasd");
             if (currentMessage.find("CONSOLE") == std::string::npos)
             {
                 continue; // If it's not a console message, we ignore it completely.
@@ -3525,7 +3735,7 @@ void misc::drawTriggerMessage()
         return;
     }
 
-    ImGui::SetNextWindowPos(ImVec2(10, 70), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(10, 90), ImGuiCond_Always);
     ImGui::Begin("Trigger Info", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
     float sine = (sin(ImGui::GetTime() * 5.0f) + 1.0f) * 0.5f; // Oscillates between 0.0 and 1.0
     ImVec4 dynamicColor;

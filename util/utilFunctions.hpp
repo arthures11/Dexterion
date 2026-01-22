@@ -20,6 +20,7 @@
 
 #undef min
 
+
 inline namespace Logger {
 	inline HANDLE hConsole;
 
